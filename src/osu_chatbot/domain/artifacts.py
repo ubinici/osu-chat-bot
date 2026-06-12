@@ -72,6 +72,8 @@ def load_records(path: Path) -> list[dict]:
 
 
 def load_entities(path: Path) -> list[Entity]:
+    if not path.exists():
+        return []
     raw = read_json(path)
     if not isinstance(raw, list):
         return []

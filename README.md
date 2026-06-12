@@ -7,7 +7,6 @@ Python CLI prototype for answering osu!-related questions from the local `databa
 ```powershell
 python -m pip install -e ".[dev]"
 osu-bot ingest
-osu-bot terms
 osu-bot entities --limit 100
 osu-bot normalize-entities
 osu-bot stats
@@ -37,7 +36,7 @@ ollama serve
 ## Pipeline
 
 - `ingest`: parses English wiki pages and all news posts into structured document and hierarchical chunk JSONL artifacts.
-- `terms`: builds an osu!-specific entity and alias dictionary from page titles, headings, tags, paths, and link text.
+- `terms`: builds a legacy deterministic entity and alias dictionary for baseline/debug comparisons.
 - `links`: builds reviewable hyperlink alias artifacts from structured wiki/news links.
 - `entities`: runs experimental zero-shot entity extraction over chunks and writes reviewable generative candidates.
 - `normalize-entities`: links generative candidates to wiki pages, groups aliases, and writes reviewable normalization artifacts.
@@ -63,7 +62,6 @@ Artifacts are written to `artifacts/rag/` by default:
 
 - `documents_structured.jsonl`
 - `chunks_hierarchical.jsonl`
-- `terms.json`
 - `links_raw.jsonl`
 - `link_alias_candidates.jsonl`
 - `link_alias_review.csv`
@@ -90,7 +88,7 @@ Expected wiki/news quirks such as empty layout headings, older news style differ
 
 ## Generative Entity Extraction
 
-The deterministic `terms` command is still useful as a baseline, but `entities` creates a separate candidate lane for observing zero-shot extraction quality without changing `terms.json`.
+The deterministic `terms` command is still available as a legacy baseline, but the recommended enrichment path is GLiNER plus normalization. Dense retrieval does not require or score `terms.json`.
 
 ```powershell
 python -m pip install -e ".[dev,entities]"

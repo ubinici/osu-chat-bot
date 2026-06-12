@@ -118,7 +118,6 @@ def test_document_retrieval_routes_help_issue_queries_to_help_centre_family(tmp_
     ]
     write_jsonl(artifact_dir / "chunks_hierarchical.jsonl", chunks)
     write_jsonl(artifact_dir / "documents_structured.jsonl", documents)
-    write_json(artifact_dir / "terms.json", [])
     config = AppConfig(artifacts=ArtifactConfig(path=artifact_dir), retrieval=RetrievalConfig(final_top_k=2))
 
     _, results = Retriever(config, use_dense=False).search("I need help with client issues")
@@ -182,7 +181,6 @@ def test_document_retrieval_routes_lag_queries_to_performance_troubleshooting(tm
     ]
     write_jsonl(artifact_dir / "chunks_hierarchical.jsonl", chunks)
     write_jsonl(artifact_dir / "documents_structured.jsonl", documents)
-    write_json(artifact_dir / "terms.json", [])
     config = AppConfig(artifacts=ArtifactConfig(path=artifact_dir), retrieval=RetrievalConfig(final_top_k=1))
 
     _, results = Retriever(config, use_dense=False).search("the game is lagging a lot, how do I fix this")

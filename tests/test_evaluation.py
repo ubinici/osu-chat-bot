@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from osu_chatbot.config import AppConfig, ArtifactConfig, RetrievalConfig
-from osu_chatbot.domain.artifacts import write_json, write_jsonl
+from osu_chatbot.domain.artifacts import write_jsonl
 from osu_chatbot.domain.models import Chunk
 from osu_chatbot.evaluation.runner import run_evaluation
 
@@ -25,7 +25,6 @@ def test_run_evaluation_scores_keyword_retrieval_without_dense_index(tmp_path: P
     ]
     write_jsonl(artifact_dir / "chunks_hierarchical.jsonl", chunks)
     write_jsonl(artifact_dir / "documents_structured.jsonl", [])
-    write_json(artifact_dir / "terms.json", [])
     dataset.write_text(
         '{"category": "definition", "question": "What is a beatmap?", "expected_document_ids": ["Beatmap"]}\n',
         encoding="utf-8",

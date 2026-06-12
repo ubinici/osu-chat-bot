@@ -23,7 +23,8 @@ class Retriever:
         artifact_dir = config.artifacts.source_path or config.artifacts.path
         self.chunks = {chunk.id: chunk for chunk in load_chunks(artifact_dir / CHUNKS_FILE)}
         self.documents = {document_id(doc): doc for doc in load_records(artifact_dir / DOCUMENTS_FILE) if document_id(doc)}
-        self.entities = load_entities(artifact_dir / TERMS_FILE)
+        self.use_dense = use_dense
+        self.entities = [] if use_dense else load_entities(artifact_dir / TERMS_FILE)
         self._token_counts: dict[str, Counter[str]] = {}
         self._document_token_counts: dict[str, Counter[str]] = {}
         self._title_tokens: dict[str, set[str]] = {}
@@ -32,7 +33,6 @@ class Retriever:
         self._postings: dict[str, set[str]] = defaultdict(set)
         self._chunks_by_document: dict[str, set[str]] = defaultdict(set)
         self._build_keyword_index()
-        self.use_dense = use_dense
         self._dense = DenseRetriever(config, self.chunks, enabled=use_dense)
 
     def search(self, query: str, final_top_k: int | None = None) -> tuple[list[Entity], list[SearchResult]]:

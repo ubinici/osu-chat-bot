@@ -20,7 +20,6 @@ from ..domain.artifacts import (
     TERMS_FILE,
     VALIDATION_REPORT_FILE,
     load_chunks,
-    load_entities,
     write_json,
     write_jsonl,
 )
@@ -322,8 +321,6 @@ def ensure_query_artifacts(config: AppConfig) -> None:
     artifact_dir = artifact_read_path(config)
     if not load_chunks(artifact_dir / CHUNKS_FILE):
         raise RuntimeError("No chunks found. Run `osu-bot ingest` first.")
-    if not load_entities(artifact_dir / TERMS_FILE):
-        raise RuntimeError("No terms found. Run `osu-bot terms` first.")
 
 
 def artifact_read_path(config: AppConfig) -> Path:
