@@ -1,0 +1,10 @@
+database/osu-wiki/
+artifacts/
+.venv/
+.pytest_cache/
+.pytest_tmp/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.ipynb_checkpoints/
+artifacts_rag_colab.zip

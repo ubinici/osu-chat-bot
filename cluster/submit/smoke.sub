@@ -1,0 +1,24 @@
+# LST/coli smoke-test submit file for ubinici.
+
+universe = docker
+docker_image = docker.coli.uni-saarland.de/ubinici-public/osu-chat-bot-rag:v1
+
+executable = /nethome/ubinici/projects/osu-chat-bot/cluster/scripts/run.sh
+arguments = smoke
+initialdir = /nethome/ubinici
+
+should_transfer_files = NO
+getenv = True
+environment = "CLUSTER_USER=ubinici LSV_USER=ubinici PROJECT_DIR=/nethome/ubinici/projects/osu-chat-bot CONFIG_PATH=cluster/config.cluster.toml BASE_ARTIFACT_DIR=/nethome/ubinici/projects/osu-chat-bot/artifacts/rag RUN_ID=smoke-$(Cluster)-$(Process) HF_HOME=/nethome/ubinici/scratch/hf-cache"
+
+log = /nethome/ubinici/scratch/logs/osu-chat-bot/logfiles/smoke.$(Cluster).$(Process).log
+output = /nethome/ubinici/scratch/logs/osu-chat-bot/logfiles/smoke.$(Cluster).$(Process).out
+error = /nethome/ubinici/scratch/logs/osu-chat-bot/logfiles/smoke.$(Cluster).$(Process).err
+
+request_CPUs = 2
+request_memory = 8G
+request_disk = 20GB
+requirements = (TARGET.UidDomain == "coli.uni-saarland.de")
++MaxWallTime = 3600
+
+queue

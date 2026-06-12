@@ -1,0 +1,28 @@
+[corpus]
+osu_wiki_path = "database/osu-wiki"
+language = "en"
+include_news = true
+
+[artifacts]
+path = "artifacts/rag"
+
+[embedding]
+model = "sentence-transformers/all-MiniLM-L6-v2"
+# Optional cluster/local-cache controls:
+# cache_folder = "D:/hf-cache"
+# device = "cuda"
+# local_files_only = true
+
+[qdrant]
+url = "file://artifacts/rag/qdrant"
+collection = "osu_wiki_en"
+vector_size = 384
+
+[retrieval]
+dense_top_k = 24
+final_top_k = 6
+
+[ollama]
+url = "http://127.0.0.1:11434"
+model = "mistral"
+temperature = 0.1

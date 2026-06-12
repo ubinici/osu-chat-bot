@@ -1,0 +1,70 @@
+{"category": "definition", "question": "wait, what even is a beatmap in osu?", "expected_document_ids": ["Beatmap"]}
+{"category": "definition", "question": "can you explain what a beatmap is without assuming I know mapping terms?", "expected_document_ids": ["Beatmap"]}
+{"category": "gameplay", "question": "someone said the AR on this map is too high, what does AR actually change?", "expected_document_ids": ["Beatmap/Approach_rate"]}
+{"category": "gameplay", "question": "why do circles appear way too early or way too late on some maps?", "expected_document_ids": ["Beatmap/Approach_rate"]}
+{"category": "gameplay", "question": "what does OD mean when people talk about accuracy windows?", "expected_document_ids": ["Beatmap/Overall_difficulty"]}
+{"category": "gameplay", "question": "why does this map feel so unforgiving even when I barely miss the timing?", "expected_document_ids": ["Beatmap/Overall_difficulty"]}
+{"category": "gameplay", "question": "what is star rating supposed to tell me?", "expected_document_ids": ["Beatmap/Star_rating"]}
+{"category": "gameplay", "question": "how can a map be 6 stars if the song itself does not sound that hard?", "expected_document_ids": ["Beatmap/Star_rating"]}
+{"category": "gameplay", "question": "what is HP drain and why does my health disappear so fast?", "expected_document_ids": ["Beatmap/Health_drain", "Beatmap/Drain_time"]}
+{"category": "gameplay", "question": "why do I lose health even when I am still playing most of the notes?", "expected_document_ids": ["Beatmap/Health_drain"]}
+{"category": "gameplay", "question": "what does drain time mean on a map page?", "expected_document_ids": ["Beatmap/Drain_time"]}
+{"category": "gameplay", "question": "what is play time counting exactly?", "expected_document_ids": ["Beatmap/Play_time"]}
+{"category": "gameplay", "question": "why does the map give me a break in the middle of the song?", "expected_document_ids": ["Beatmap/Break"]}
+{"category": "gameplay", "question": "what are jumps and why do people call them aim maps?", "expected_document_ids": ["Beatmap/Pattern/osu!/Jump"]}
+{"category": "mapping", "question": "I want to make a map, where is the editor stuff explained?", "expected_document_ids": ["Client/Beatmap_editor"]}
+{"category": "mapping", "question": "where do I go in the client to start placing notes for a song?", "expected_document_ids": ["Client/Beatmap_editor"]}
+{"category": "mapping", "question": "what is timing in beatmapping?", "expected_document_ids": ["Beatmapping/Timing"]}
+{"category": "mapping", "question": "my map feels off beat, what part of mapping should I learn first?", "expected_document_ids": ["Beatmapping/Timing"]}
+{"category": "mapping", "question": "what are hitsounds and why do mappers care about them?", "expected_document_ids": ["Beatmapping/Hitsound"]}
+{"category": "mapping", "question": "the claps and whistles feel random in this map, what are those called?", "expected_document_ids": ["Beatmapping/Hitsound"]}
+{"category": "mapping", "question": "how do I line objects up neatly instead of eyeballing everything?", "expected_document_ids": ["Beatmapping/Grid_snapping"]}
+{"category": "mapping", "question": "is there a tool for snapping circles to a grid in the editor?", "expected_document_ids": ["Beatmapping/Grid_snapping"]}
+{"category": "mapping", "question": "what does new combo mean when I am editing a map?", "expected_document_ids": ["Beatmapping/New_combo"]}
+{"category": "mapping", "question": "why do object colours reset halfway through a pattern?", "expected_document_ids": ["Beatmapping/New_combo"]}
+{"category": "mapping", "question": "what is stack leniency and why are objects sitting on top of each other?", "expected_document_ids": ["Beatmap/Stack_leniency"]}
+{"category": "ranking", "question": "how does a beatmap actually become ranked?", "expected_document_ids": ["Beatmap_ranking_procedure"]}
+{"category": "ranking", "question": "who checks a map before it gets ranked?", "expected_document_ids": ["Beatmap_ranking_procedure"]}
+{"category": "ranking", "question": "what are ranking criteria for?", "expected_document_ids": ["Ranking_criteria", "Beatmap_ranking_procedure"]}
+{"category": "ranking", "question": "what is pp and why did one play give me more than another?", "expected_document_ids": ["Performance_points"]}
+{"category": "ranking", "question": "why did my rank change after a play?", "expected_document_ids": ["Ranking", "Performance_points"]}
+{"category": "ranking", "question": "what is the difference between my global rank and country rank?", "expected_document_ids": ["Ranking"]}
+{"category": "ranking", "question": "how are player rankings shown on osu?", "expected_document_ids": ["Ranking"]}
+{"category": "support_symptom", "question": "my pc sucks, how do I fix it?", "expected_document_ids": ["Performance_troubleshooting", "Help_centre/Client"]}
+{"category": "support_symptom", "question": "osu feels choppy and my frames are awful, what should I check?", "expected_document_ids": ["Performance_troubleshooting"]}
+{"category": "support_symptom", "question": "the game is lagging like crazy even though other games are fine", "expected_document_ids": ["Performance_troubleshooting", "Help_centre/Client"]}
+{"category": "support_symptom", "question": "my cursor freezes for a moment while playing, any osu-specific fixes?", "expected_document_ids": ["Performance_troubleshooting", "Help_centre/Client"]}
+{"category": "support_symptom", "question": "osu keeps crashing after an update, what now?", "expected_document_ids": ["Help_centre/Client"]}
+{"category": "support_symptom", "question": "the client will not open and I have no idea where to start", "expected_document_ids": ["Help_centre/Client", "Help_centre"]}
+{"category": "support_symptom", "question": "I cannot hear hitsounds or the music sounds wrong in game", "expected_document_ids": ["Help_centre/Client", "Client/Options"]}
+{"category": "support", "question": "where is the general help page for osu problems?", "expected_document_ids": ["Help_centre"]}
+{"category": "support", "question": "I got stuck and do not know which support article applies", "expected_document_ids": ["Help_centre"]}
+{"category": "client", "question": "how do I install osu on a new computer?", "expected_document_ids": ["Client/Installation"]}
+{"category": "client", "question": "what files or folders does osu put on my machine?", "expected_document_ids": ["Client/Installation"]}
+{"category": "client", "question": "where do I change options like graphics, sound, or input?", "expected_document_ids": ["Client/Options"]}
+{"category": "client", "question": "I want to tweak the client settings but I do not know what menu to use", "expected_document_ids": ["Client/Options"]}
+{"category": "client", "question": "what keyboard shortcuts does osu have?", "expected_document_ids": ["Client/Keyboard_shortcuts"]}
+{"category": "client", "question": "is there a hotkey for quickly doing things in the editor or player?", "expected_document_ids": ["Client/Keyboard_shortcuts"]}
+{"category": "client", "question": "what am I looking at on the osu client screen?", "expected_document_ids": ["Client/Interface"]}
+{"category": "client", "question": "can you explain the buttons and panels in the game client?", "expected_document_ids": ["Client/Interface"]}
+{"category": "beginner", "question": "osu is so hard, how do I get better?", "expected_document_ids": ["Guides", "FAQ"]}
+{"category": "beginner", "question": "I just started and everything is overwhelming, where should I learn the basics?", "expected_document_ids": ["Guides", "FAQ"]}
+{"category": "beginner", "question": "what should I do after making an osu account?", "expected_document_ids": ["Registration", "Guides"]}
+{"category": "beginner", "question": "how do I register and start playing?", "expected_document_ids": ["Registration"]}
+{"category": "rules", "question": "am I allowed to let my friend play on my account?", "expected_document_ids": ["Rules"]}
+{"category": "rules", "question": "what kind of stuff can get me restricted or banned?", "expected_document_ids": ["Rules"]}
+{"category": "rules", "question": "someone is being awful in chat, where do I report that?", "expected_document_ids": ["Reporting_bad_behaviour", "Rules"]}
+{"category": "rules", "question": "how do I report bad behaviour without making things worse?", "expected_document_ids": ["Reporting_bad_behaviour"]}
+{"category": "chat", "question": "how does chat work in osu?", "expected_document_ids": ["Chat_console"]}
+{"category": "chat", "question": "where do I type commands or message people in game?", "expected_document_ids": ["Chat_console"]}
+{"category": "chat", "question": "who or what is BanchoBot?", "expected_document_ids": ["BanchoBot"]}
+{"category": "chat", "question": "why is a bot replying to me in osu chat?", "expected_document_ids": ["BanchoBot"]}
+{"category": "history", "question": "who created the game?", "expected_document_ids": ["History_of_osu!"]}
+{"category": "history", "question": "when did osu start and how did it become what it is now?", "expected_document_ids": ["History_of_osu!"]}
+{"category": "history", "question": "what is the story behind osu being made?", "expected_document_ids": ["History_of_osu!"]}
+{"category": "supporter", "question": "what does osu supporter actually give you?", "expected_document_ids": ["osu!supporter"]}
+{"category": "supporter", "question": "is supporter just a donation badge or does it unlock features?", "expected_document_ids": ["osu!supporter"]}
+{"category": "modes", "question": "what game modes does osu have?", "expected_document_ids": ["Game_mode"]}
+{"category": "modes", "question": "why are people talking about taiko, catch, mania, and standard like they are different games?", "expected_document_ids": ["Game_mode"]}
+{"category": "skinning", "question": "how do I change how osu looks?", "expected_document_ids": ["Skinning"]}
+{"category": "skinning", "question": "where do custom skins go?", "expected_document_ids": ["Skinning", "Client/Installation"]}

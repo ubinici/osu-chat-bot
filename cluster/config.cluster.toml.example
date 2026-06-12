@@ -1,0 +1,33 @@
+[corpus]
+osu_wiki_path = "/nethome/bualtar/projects/chatbot-rag/database/osu-wiki"
+language = "en"
+include_news = true
+
+[artifacts]
+# Stable prepared artifacts produced by ingest/terms/links/stats/validate.
+source_path = "/nethome/bualtar/projects/chatbot-rag/artifacts/rag"
+# Per-run outputs should usually be supplied via OSU_BOT_ARTIFACT_PATH.
+path = "/nethome/bualtar/projects/chatbot-rag/artifacts/runs/manual/rag"
+
+[embedding]
+model = "sentence-transformers/all-MiniLM-L6-v2"
+cache_folder = "/data/users/bualtar/hf-cache"
+# Use "cuda" only if the submitted job requests a GPU and the Docker image has CUDA/PyTorch support.
+device = "cpu"
+# Set false for the first cache-priming run, then true for production indexing.
+local_files_only = true
+
+[qdrant]
+# Use a server Qdrant URL for parallel HTCondor jobs.
+url = "file:///nethome/bualtar/projects/chatbot-rag/artifacts/runs/index/rag/qdrant"
+collection = "osu_wiki_en"
+vector_size = 384
+
+[retrieval]
+dense_top_k = 24
+final_top_k = 6
+
+[ollama]
+url = "http://127.0.0.1:11434"
+model = "mistral"
+temperature = 0.1
