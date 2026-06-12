@@ -23,8 +23,9 @@ For a guided notebook version of the workflow, open
 `notebooks/osu_chatbot_colab_walkthrough.ipynb`.
 
 The notebook explains each step and includes runnable cells for setup, osu-wiki
-checkout, artifact generation, keyword retrieval, seed evaluation, optional dense
-indexing, optional GLiNER entity extraction, and artifact download.
+checkout, artifact generation, background dense indexing, background GLiNER
+entity extraction and normalization, dense seed evaluation, keyword diagnostics,
+and artifact download.
 
 Generation expects a local Ollama model, defaulting to `mistral`.
 
