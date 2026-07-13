@@ -1,112 +1,130 @@
 from __future__ import annotations
 
-from collections import Counter
-from collections import defaultdict
+from collections import Counter, defaultdict
 import math
 import re
 
 from ..config import AppConfig
-from ..domain.artifacts import CHUNKS_FILE, DOCUMENTS_FILE, TERMS_FILE, load_chunks, load_entities, load_records
+from ..domain.artifacts import CHUNKS_FILE, DOCUMENTS_FILE, load_chunks, load_records
 from ..domain.models import Entity, SearchResult
-from .intent import QueryIntent, classify_query, normalize_token
-from ..knowledge.terms import detect_entities
+from ..domain.source_profile import profile_for_chunk
 from .dense import DenseRetriever
-from .lexical import document_id, section_text_parts, tokenize
+from .intent import QueryIntent, classify_query
+from .lexical import document_id, tokenize
 from .ranker import result_sort_key
+from .resolver import DocumentCandidate, DocumentResolver
 
 PROCEDURAL_HINT_RE = re.compile(r"(?m)(^\s*\d+\.|\b(open|click|download|install|use)\b)")
 
 
 class Retriever:
-    def __init__(self, config: AppConfig, use_dense: bool = True):
+    def __init__(self, config: AppConfig, use_dense: bool | None = None, *, use_vectors: bool | None = None):
         self.config = config
         artifact_dir = config.artifacts.source_path or config.artifacts.path
         self.chunks = {chunk.id: chunk for chunk in load_chunks(artifact_dir / CHUNKS_FILE)}
         self.documents = {document_id(doc): doc for doc in load_records(artifact_dir / DOCUMENTS_FILE) if document_id(doc)}
-        self.use_dense = use_dense
-        self.entities = [] if use_dense else load_entities(artifact_dir / TERMS_FILE)
+        self.resolver = DocumentResolver(self.documents, artifact_dir, chunks=self.chunks.values())
+
+        vector_fallback = config.retrieval.use_vector_fallback
+        if use_dense is not None:
+            vector_fallback = use_dense
+        if use_vectors is not None:
+            vector_fallback = use_vectors
+        self.use_dense = vector_fallback
+        self._dense = DenseRetriever(config, self.chunks, enabled=True) if self.use_dense else None
+
         self._token_counts: dict[str, Counter[str]] = {}
-        self._document_token_counts: dict[str, Counter[str]] = {}
         self._title_tokens: dict[str, set[str]] = {}
         self._search_text: dict[str, str] = {}
         self._metadata_text: dict[str, str] = {}
         self._postings: dict[str, set[str]] = defaultdict(set)
         self._chunks_by_document: dict[str, set[str]] = defaultdict(set)
+        self.last_document_candidates: list[DocumentCandidate] = []
         self._build_keyword_index()
-        self._dense = DenseRetriever(config, self.chunks, enabled=use_dense)
 
     def search(self, query: str, final_top_k: int | None = None) -> tuple[list[Entity], list[SearchResult]]:
         final_top_k = final_top_k or self.config.retrieval.final_top_k
         intent = classify_query(query)
-        detected = detect_entities(query, self.entities)
-        document_scores = self._document_scores(query, detected, intent)
+        candidate_limit = max(self.config.retrieval.document_top_k, self.config.retrieval.document_top_k * 4)
+        resolved_candidates = self.resolver.resolve(query, intent, limit=candidate_limit)
+        document_candidates = self._select_lane_candidates(resolved_candidates)
+        self.last_document_candidates = document_candidates
+        document_scores = {candidate.document_id: candidate.score for candidate in document_candidates}
+
         dense_scores = self._dense_scores(query)
-        candidates = set(dense_scores)
-        candidates.update(self._document_candidate_ids(document_scores))
-        candidates.update(self._keyword_candidate_ids(query))
-        candidates.update(self._entity_candidate_ids(detected))
+        if self.use_dense and dense_scores and not document_scores:
+            document_scores = self._dense_document_scores(dense_scores)
+
+        candidates = self._document_candidate_ids(document_scores)
         if not candidates:
-            candidates.update(list(self.chunks)[: self.config.retrieval.dense_top_k])
+            candidates.update(self._keyword_candidate_ids(query))
+        if self.use_dense and dense_scores and not candidates:
+            candidates.update(dense_scores)
+        if not candidates:
+            candidates.update(list(self.chunks)[: self.config.retrieval.candidate_chunk_limit])
+
         keyword_scores = self._keyword_scores(query, candidates, intent)
-        entity_scores = self._entity_scores(detected, candidates)
+        entity_scores = self._alias_scores(document_candidates, candidates)
         chunk_document_scores = self._chunk_document_scores(document_scores, candidates)
 
-        results = [
-            SearchResult(
-                chunk=self.chunks[chunk_id],
+        results = []
+        for chunk_id in candidates:
+            if chunk_id not in self.chunks:
+                continue
+            rank_score = self._rank_score(
+                chunk_id,
                 dense_score=dense_scores.get(chunk_id, 0.0),
                 keyword_score=keyword_scores.get(chunk_id, 0.0),
                 entity_score=entity_scores.get(chunk_id, 0.0),
                 document_score=chunk_document_scores.get(chunk_id, 0.0),
             )
-            for chunk_id in candidates
-            if chunk_id in self.chunks
-        ]
+            profile = profile_for_chunk(self.chunks[chunk_id], self.documents)
+            topic_id, topic_document_ids = self.resolver.topic_for_document(self.chunks[chunk_id].document_id)
+            results.append(
+                SearchResult(
+                    chunk=self.chunks[chunk_id],
+                    dense_score=dense_scores.get(chunk_id, 0.0),
+                    keyword_score=keyword_scores.get(chunk_id, 0.0),
+                    entity_score=entity_scores.get(chunk_id, 0.0),
+                    document_score=chunk_document_scores.get(chunk_id, 0.0),
+                    rank_score=rank_score,
+                    retrieval_lane=profile.lane,
+                    trust_tier=profile.trust_tier,
+                    source_weight=profile.weight,
+                    topic_id=topic_id,
+                    topic_document_ids=topic_document_ids,
+                )
+            )
+
         results.sort(key=result_sort_key)
-        return detected, results[:final_top_k]
+        results = results[: self.config.retrieval.candidate_chunk_limit]
+        return self._detected_entities(document_candidates), results[:final_top_k]
 
-    def _document_scores(self, query: str, detected: list[Entity], intent: QueryIntent) -> dict[str, float]:
-        if not self.documents:
-            return {}
-        query_terms = Counter([*tokenize(query), *intent.expanded_terms])
-        if not query_terms and not detected:
-            return {}
-        clean_query = " ".join(query_terms)
-        entity_names = {
-            name
-            for entity in detected
-            for name in [entity.canonical.casefold(), *(alias.casefold() for alias in entity.aliases)]
-        }
-        scores: dict[str, float] = {}
-        for doc_id, document in self.documents.items():
-            doc_terms = self._document_terms_for(doc_id)
-            overlap = sum(min(count, doc_terms.get(term, 0)) for term, count in query_terms.items())
-            score = math.log1p(overlap) * 1.8 if overlap else 0.0
-            title_key = str(document.get("title") or "").casefold()
-            page_key = doc_id.replace("_", " ").replace("/", " ").casefold()
-            tag_keys = {str(tag).casefold() for tag in document.get("tags", []) if isinstance(document.get("tags"), list)}
-            if clean_query and clean_query == title_key:
-                score += 10.0
-            elif clean_query and (clean_query in title_key or clean_query in page_key):
-                score += 4.0
-            if entity_names and (title_key in entity_names or page_key in entity_names or any(tag in entity_names for tag in tag_keys)):
-                score += 8.0
-            tag_overlap = sum(1 for term in query_terms if term in tag_keys)
-            score += tag_overlap * 2.5
-            title_terms = set(tokenize(str(document.get("title") or "")))
-            page_tail_terms = set(tokenize(doc_id.rsplit("/", 1)[-1].replace("_", " ")))
-            score += sum(1 for term in query_terms if term in title_terms) * 3.0
-            score += sum(1 for term in query_terms if term in page_tail_terms) * 2.0
-            score += intent.document_hints.get(doc_id, 0.0)
-            if intent.has("troubleshooting") and str(document.get("subculture") or "") == "help":
-                score += 1.5
-            if score:
-                scores[doc_id] = score
-        return scores
+    def _select_lane_candidates(self, candidates: list[DocumentCandidate]) -> list[DocumentCandidate]:
+        selected: list[DocumentCandidate] = []
+        lane_counts: Counter[str] = Counter()
+        for candidate in candidates:
+            if len(selected) >= self.config.retrieval.document_top_k:
+                break
+            if lane_counts[candidate.retrieval_lane] >= self.config.retrieval.lane_top_k:
+                continue
+            selected.append(candidate)
+            lane_counts[candidate.retrieval_lane] += 1
+        if len(selected) < self.config.retrieval.document_top_k:
+            selected_ids = {candidate.document_id for candidate in selected}
+            for candidate in candidates:
+                if candidate.document_id in selected_ids:
+                    continue
+                selected.append(candidate)
+                if len(selected) >= self.config.retrieval.document_top_k:
+                    break
+        return selected
 
-    def _document_candidate_ids(self, document_scores: dict[str, float], limit: int = 12) -> set[str]:
+    def _document_candidate_ids(self, document_scores: dict[str, float]) -> set[str]:
         candidates: set[str] = set()
-        for doc_id, _ in sorted(document_scores.items(), key=lambda item: item[1], reverse=True)[:limit]:
+        for doc_id, _ in sorted(document_scores.items(), key=lambda item: item[1], reverse=True)[
+            : self.config.retrieval.document_top_k
+        ]:
             candidates.update(self._chunks_by_document.get(doc_id, set()))
             prefix = f"{doc_id}/"
             for child_doc_id, chunk_ids in self._chunks_by_document.items():
@@ -119,19 +137,27 @@ class Retriever:
         if not document_scores:
             return scores
         for chunk_id in candidate_ids:
-            doc_id = self.chunks[chunk_id].document_id
+            chunk = self.chunks[chunk_id]
+            doc_id = chunk.document_id
             score = document_scores.get(doc_id, 0.0)
             if not score:
                 parent_scores = [value * 0.7 for parent_id, value in document_scores.items() if doc_id.startswith(f"{parent_id}/")]
                 score = max(parent_scores, default=0.0)
             if score:
-                chunk_type = str(self.chunks[chunk_id].metadata.get("chunk_type", ""))
-                type_multiplier = 1.15 if chunk_type == "article" else 1.0
-                scores[chunk_id] = score * type_multiplier
+                scores[chunk_id] = score
         return scores
 
     def _dense_scores(self, query: str) -> dict[str, float]:
-        return self._dense.scores(query)
+        return self._dense.scores(query) if self._dense is not None else {}
+
+    def _dense_document_scores(self, dense_scores: dict[str, float]) -> dict[str, float]:
+        scores: dict[str, float] = {}
+        for chunk_id, score in dense_scores.items():
+            chunk = self.chunks.get(chunk_id)
+            if chunk is None:
+                continue
+            scores[chunk.document_id] = max(scores.get(chunk.document_id, 0.0), score * 10.0)
+        return scores
 
     def _keyword_scores(self, query: str, candidate_ids: set[str], intent: QueryIntent) -> dict[str, float]:
         query_terms = Counter([*tokenize(query), *intent.expanded_terms])
@@ -144,7 +170,7 @@ class Retriever:
             terms = self._token_counts_for(chunk_id)
             overlap = sum(min(count, terms.get(term, 0)) for term, count in query_terms.items())
             if overlap:
-                title_bonus = sum(1 for term in query_terms if term in self._title_tokens.get(chunk_id, set())) * 0.25
+                title_bonus = sum(1 for term in query_terms if term in self._title_tokens.get(chunk_id, set())) * 0.5
                 exact_bonus = 0.0
                 title_key = chunk.title.casefold()
                 heading_key = chunk.heading_path[-1].casefold() if chunk.heading_path else ""
@@ -159,7 +185,7 @@ class Retriever:
                 if intent.has("access") and PROCEDURAL_HINT_RE.search(chunk.text.casefold()):
                     exact_bonus += 1.25
                 heading_tokens = set(tokenize(" ".join(chunk.heading_path)))
-                exact_bonus += sum(1 for term in query_terms if term in heading_tokens) * 0.9
+                exact_bonus += sum(1 for term in query_terms if term in heading_tokens) * 1.1
                 if intent.has("troubleshooting") and chunk.document_id.startswith("Help_centre"):
                     exact_bonus += 0.5
                 if intent.has("performance") and chunk.document_id == "Performance_troubleshooting":
@@ -167,41 +193,48 @@ class Retriever:
                 scores[chunk_id] = math.log1p(overlap) + title_bonus + exact_bonus
         return scores
 
-    def _entity_scores(self, detected: list[Entity], candidate_ids: set[str]) -> dict[str, float]:
-        if not detected:
+    def _alias_scores(self, document_candidates: list[DocumentCandidate], candidate_ids: set[str]) -> dict[str, float]:
+        aliases_by_document = {
+            candidate.document_id: len(set(candidate.matched_aliases))
+            for candidate in document_candidates
+            if candidate.matched_aliases
+        }
+        if not aliases_by_document:
             return {}
         scores: dict[str, float] = {}
         for chunk_id in candidate_ids:
             chunk = self.chunks[chunk_id]
-            haystack = self._search_text_for(chunk_id)
-            score = 0.0
-            for entity in detected:
-                if any(alias.casefold() in haystack for alias in entity.aliases):
-                    score += entity.score
-                entity_names = {entity.canonical.casefold(), *(alias.casefold() for alias in entity.aliases)}
-                title_key = chunk.title.casefold()
-                heading_key = chunk.heading_path[-1].casefold() if chunk.heading_path else ""
-                if title_key in entity_names:
-                    score += 8.0
-                if heading_key in entity_names:
-                    score += 3.0
-            if score:
-                scores[chunk_id] = score
+            alias_count = aliases_by_document.get(chunk.document_id, 0)
+            if not alias_count:
+                parent_counts = [
+                    value for parent_id, value in aliases_by_document.items() if chunk.document_id.startswith(f"{parent_id}/")
+                ]
+                alias_count = max(parent_counts, default=0)
+            if alias_count:
+                scores[chunk_id] = min(8.0, 1.5 * alias_count)
         return scores
+
+    def _rank_score(
+        self,
+        chunk_id: str,
+        *,
+        dense_score: float,
+        keyword_score: float,
+        entity_score: float,
+        document_score: float,
+    ) -> float:
+        chunk = self.chunks[chunk_id]
+        chunk_type = str(chunk.metadata.get("chunk_type", ""))
+        type_bonus = {"article": 0.9, "section": 0.7, "table": 0.25, "formula": 0.15, "citation": 0.0}.get(chunk_type, 0.1)
+        profile = profile_for_chunk(chunk, self.documents)
+        base = document_score * 2.0 + keyword_score * 2.5 + entity_score * 0.7 + dense_score * 0.2 + type_bonus
+        lane_bonus = {"canonical": 0.3, "troubleshooting": 0.25, "temporal": 0.05}.get(profile.lane, 0.0)
+        return base * profile.weight + lane_bonus
 
     def _keyword_candidate_ids(self, query: str) -> set[str]:
         candidates: set[str] = set()
         for term in tokenize(query):
             candidates.update(self._postings.get(term, set()))
-        return candidates
-
-    def _entity_candidate_ids(self, detected: list[Entity]) -> set[str]:
-        candidates: set[str] = set()
-        for entity in detected:
-            for alias in entity.aliases:
-                candidates.update(self._postings.get(alias.casefold(), set()))
-                for token in tokenize(alias):
-                    candidates.update(self._postings.get(token, set()))
         return candidates
 
     def _build_keyword_index(self) -> None:
@@ -262,21 +295,18 @@ class Retriever:
             ).casefold()
         return self._search_text[chunk_id]
 
-    def _document_terms_for(self, doc_id: str) -> Counter[str]:
-        if doc_id not in self._document_token_counts:
-            document = self.documents[doc_id]
-            text = " ".join(
-                [
-                    str(document.get("title") or ""),
-                    doc_id.replace("_", " ").replace("/", " "),
-                    " ".join(str(tag) for tag in document.get("tags", []) if isinstance(document.get("tags"), list)),
-                    " ".join(str(tag) for tag in document.get("series_tags", []) if isinstance(document.get("series_tags"), list)),
-                    str(document.get("domain") or ""),
-                    str(document.get("subculture") or ""),
-                    str(document.get("topic") or ""),
-                    str(document.get("slug") or "").replace("-", " "),
-                    " ".join(section_text_parts(document)),
-                ]
+    def _detected_entities(self, document_candidates: list[DocumentCandidate]) -> list[Entity]:
+        entities: list[Entity] = []
+        for candidate in document_candidates[: self.config.retrieval.document_top_k]:
+            if not candidate.matched_aliases:
+                continue
+            document = self.documents.get(candidate.document_id, {})
+            entities.append(
+                Entity(
+                    canonical=str(document.get("title") or candidate.document_id),
+                    aliases=sorted(set(candidate.matched_aliases)),
+                    sources=sorted(set(candidate.reasons)),
+                    score=candidate.score,
+                )
             )
-            self._document_token_counts[doc_id] = Counter(tokenize(text))
-        return self._document_token_counts[doc_id]
+        return entities

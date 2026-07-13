@@ -49,6 +49,13 @@ STOPWORDS = {
     "not",
     "game",
     "games",
+    "osu",
+    "osu!",
+    "people",
+    "player",
+    "players",
+    "talk",
+    "talking",
 }
 
 

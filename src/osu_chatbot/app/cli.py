@@ -18,6 +18,8 @@ def main(argv: list[str] | None = None) -> int:
     subparsers.add_parser("ingest", help="Parse osu-wiki markdown into documents and chunks")
     subparsers.add_parser("terms", help="Build osu!-specific terminology dictionary")
     subparsers.add_parser("links", help="Build reviewable hyperlink alias artifacts")
+    subparsers.add_parser("topics", help="Build canonical topic artifact for stable retrieval identity")
+    subparsers.add_parser("aliases", help="Build generated document alias artifact for router retrieval")
     entities_parser = subparsers.add_parser("entities", help="Extract generative entity candidates from chunks")
     entities_parser.add_argument("--backend", default="gliner", choices=["gliner"], help="Entity extraction backend")
     entities_parser.add_argument("--model", default=None, help="Backend model name")
@@ -55,15 +57,18 @@ def main(argv: list[str] | None = None) -> int:
 
     inspect_parser = subparsers.add_parser("inspect", help="Inspect retrieval results without calling the LLM")
     inspect_parser.add_argument("question")
-    inspect_parser.add_argument("--keyword-only", action="store_true", help="Skip Qdrant dense retrieval")
+    inspect_parser.add_argument("--keyword-only", action="store_true", help="Compatibility alias for router-only retrieval")
+    inspect_parser.add_argument("--vectors", action="store_true", help="Opt in to Qdrant vector fallback")
 
     query_parser = subparsers.add_parser("query", help="Ask a cited RAG question via Ollama")
     query_parser.add_argument("question")
-    query_parser.add_argument("--keyword-only", action="store_true", help="Skip Qdrant dense retrieval")
+    query_parser.add_argument("--keyword-only", action="store_true", help="Compatibility alias for router-only retrieval")
+    query_parser.add_argument("--vectors", action="store_true", help="Opt in to Qdrant vector fallback")
 
     eval_parser = subparsers.add_parser("eval", help="Run retrieval evaluation from a JSONL dataset")
     eval_parser.add_argument("dataset", type=Path)
-    eval_parser.add_argument("--dense", action="store_true", help="Use dense Qdrant retrieval during evaluation")
+    eval_parser.add_argument("--dense", action="store_true", help="Compatibility alias for --vectors")
+    eval_parser.add_argument("--vectors", action="store_true", help="Opt in to Qdrant vector fallback")
     eval_parser.add_argument("--output", type=Path, help="Optional JSON report path")
 
     args = parser.parse_args(argv)
@@ -76,6 +81,10 @@ def main(argv: list[str] | None = None) -> int:
             return commands.run_terms(config)
         if args.command == "links":
             return commands.run_links(config)
+        if args.command == "topics":
+            return commands.run_topics(config)
+        if args.command == "aliases":
+            return commands.run_aliases(config)
         if args.command == "entities":
             return commands.run_entities(
                 config,
@@ -105,11 +114,11 @@ def main(argv: list[str] | None = None) -> int:
                 quiet=args.quiet,
             )
         if args.command == "inspect":
-            return commands.run_inspect(config, args.question, keyword_only=args.keyword_only)
+            return commands.run_inspect(config, args.question, keyword_only=args.keyword_only, use_vectors=args.vectors)
         if args.command == "query":
-            return commands.run_query(config, args.question, keyword_only=args.keyword_only)
+            return commands.run_query(config, args.question, keyword_only=args.keyword_only, use_vectors=args.vectors)
         if args.command == "eval":
-            return commands.run_eval(config, args.dataset, use_dense=args.dense, output=args.output)
+            return commands.run_eval(config, args.dataset, use_dense=args.dense, use_vectors=args.vectors, output=args.output)
     except Exception as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1

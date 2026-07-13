@@ -48,9 +48,17 @@ class SearchResult:
     keyword_score: float
     entity_score: float
     document_score: float = 0.0
+    rank_score: float | None = None
+    retrieval_lane: str = "community"
+    trust_tier: str = "unverified"
+    source_weight: float = 1.0
+    topic_id: str = ""
+    topic_document_ids: list[str] = field(default_factory=list)
 
     @property
     def score(self) -> float:
+        if self.rank_score is not None:
+            return self.rank_score
         return self.dense_score + self.keyword_score + self.entity_score + self.document_score
 
 

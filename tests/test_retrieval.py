@@ -187,3 +187,99 @@ def test_document_retrieval_routes_lag_queries_to_performance_troubleshooting(tm
 
     assert results[0].chunk.id == "performance-low-frame-rate"
     assert results[0].document_score > 0
+
+
+def test_router_limits_snippet_ranking_to_selected_documents(tmp_path: Path) -> None:
+    artifact_dir = tmp_path / "rag"
+    chunks = [
+        Chunk(
+            id="ar-article",
+            document_id="Beatmap/Approach_rate",
+            source_type="wiki",
+            file_path="Beatmap/Approach_rate/en.md",
+            osu_url="https://osu.ppy.sh/wiki/en/Beatmap/Approach_rate",
+            title="Approach rate",
+            text="Approach rate controls how long hit objects are visible before they must be hit.",
+            chunk_index=0,
+            heading_path=["Approach rate"],
+            metadata={"chunk_type": "article"},
+        ),
+        Chunk(
+            id="unrelated-many-keywords",
+            document_id="Unrelated",
+            source_type="wiki",
+            file_path="Unrelated/en.md",
+            osu_url="https://osu.ppy.sh/wiki/en/Unrelated",
+            title="Unrelated",
+            text="AR AR AR AR map change change change.",
+            chunk_index=0,
+            heading_path=["Unrelated"],
+            metadata={"chunk_type": "article"},
+        ),
+    ]
+    documents = [
+        {
+            "source": "osu-wiki",
+            "page_id": "Beatmap/Approach_rate",
+            "title": "Approach rate",
+            "repo_rel_path": "Beatmap/Approach_rate/en.md",
+            "sections": [{"title": "Approach rate", "heading_path": ["Approach rate"]}],
+        },
+        {
+            "source": "osu-wiki",
+            "page_id": "Unrelated",
+            "title": "Unrelated",
+            "repo_rel_path": "Unrelated/en.md",
+            "sections": [{"title": "Unrelated", "heading_path": ["Unrelated"]}],
+        },
+    ]
+    write_jsonl(artifact_dir / "chunks_hierarchical.jsonl", chunks)
+    write_jsonl(artifact_dir / "documents_structured.jsonl", documents)
+    config = AppConfig(artifacts=ArtifactConfig(path=artifact_dir), retrieval=RetrievalConfig(final_top_k=2))
+
+    _, results = Retriever(config).search("what does AR change?")
+
+    assert [result.chunk.id for result in results] == ["ar-article"]
+
+
+def test_default_retrieval_does_not_instantiate_dense_retriever(tmp_path: Path, monkeypatch) -> None:
+    artifact_dir = tmp_path / "rag"
+    chunks = [
+        Chunk(
+            id="beatmap::article",
+            document_id="Beatmap",
+            source_type="wiki",
+            file_path="Beatmap/en.md",
+            osu_url="https://osu.ppy.sh/wiki/en/Beatmap",
+            title="Beatmap",
+            text="A beatmap is a set of game levels.",
+            chunk_index=0,
+            heading_path=["Beatmap"],
+            metadata={"chunk_type": "article"},
+        )
+    ]
+    write_jsonl(artifact_dir / "chunks_hierarchical.jsonl", chunks)
+    write_jsonl(
+        artifact_dir / "documents_structured.jsonl",
+        [
+            {
+                "source": "osu-wiki",
+                "page_id": "Beatmap",
+                "title": "Beatmap",
+                "repo_rel_path": "Beatmap/en.md",
+                "sections": [{"title": "Beatmap", "heading_path": ["Beatmap"]}],
+            }
+        ],
+    )
+
+    def fail_if_constructed(*args, **kwargs):
+        raise AssertionError("dense retriever should not be constructed by default")
+
+    monkeypatch.setattr("osu_chatbot.retrieval.service.DenseRetriever", fail_if_constructed)
+    config = AppConfig(artifacts=ArtifactConfig(path=artifact_dir), retrieval=RetrievalConfig(final_top_k=1))
+
+    _, results = Retriever(config).search("What is a beatmap?")
+
+    assert results[0].chunk.id == "beatmap::article"
+    assert results[0].retrieval_lane == "canonical"
+    assert results[0].trust_tier == "canonical"

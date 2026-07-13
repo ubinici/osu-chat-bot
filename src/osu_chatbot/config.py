@@ -37,7 +37,11 @@ class QdrantConfig:
 @dataclass(frozen=True)
 class RetrievalConfig:
     dense_top_k: int = 24
+    document_top_k: int = 8
+    lane_top_k: int = 3
+    candidate_chunk_limit: int = 64
     final_top_k: int = 6
+    use_vector_fallback: bool = False
 
 
 @dataclass(frozen=True)
@@ -87,7 +91,11 @@ def load_config(path: str | Path = "config.toml") -> AppConfig:
         ),
         retrieval=RetrievalConfig(
             dense_top_k=int(data.get("retrieval", {}).get("dense_top_k", 24)),
+            document_top_k=int(data.get("retrieval", {}).get("document_top_k", 8)),
+            lane_top_k=int(data.get("retrieval", {}).get("lane_top_k", 3)),
+            candidate_chunk_limit=int(data.get("retrieval", {}).get("candidate_chunk_limit", 64)),
             final_top_k=int(data.get("retrieval", {}).get("final_top_k", 6)),
+            use_vector_fallback=bool(data.get("retrieval", {}).get("use_vector_fallback", False)),
         ),
         ollama=OllamaConfig(
             url=data.get("ollama", {}).get("url", "http://127.0.0.1:11434").rstrip("/"),
