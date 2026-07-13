@@ -1,157 +1,106 @@
-# osu! Chat Bot RAG Prototype
+# osu! Chatbot
 
-Python CLI prototype for answering osu!-related questions from the local `database/osu-wiki` checkout.
+A small retrieval-augmented chatbot for answering questions about the osu! ecosystem with cited sources.
 
-## Quick Start
+The current corpus is the English osu! wiki and osu! news archive. Corpus adapters can be added later without changing retrieval or generation.
+
+## Pipeline
+
+```text
+offline: osu! sources -> documents -> embedding-sized chunks -> Qdrant
+online:  query -> intent and alias hints -> dense retrieval -> grounded prompt -> answer with citations
+```
+
+The serving path deliberately uses one retrieval strategy. Qdrant stores the complete chunk payload, so querying does not load the large document and chunk JSONL artifacts into application memory.
+
+## Quick start
+
+Python 3.11 or newer is required.
 
 ```powershell
 python -m pip install -e ".[dev]"
 osu-bot ingest
-osu-bot entities --limit 100
-osu-bot normalize-entities
-osu-bot stats
 osu-bot validate
 osu-bot index
-osu-bot inspect "What is a beatmap?"
-osu-bot query "What is osu!direct?"
+osu-bot inspect "What does AR change?"
 ```
 
-## Colab Walkthrough
-
-For a guided notebook version of the workflow, open
-`notebooks/osu_chatbot_colab_walkthrough.ipynb`.
-
-The notebook explains each step and includes runnable cells for setup, osu-wiki
-checkout, artifact generation, background dense indexing, background GLiNER
-entity extraction and normalization, dense seed evaluation, keyword diagnostics,
-and artifact download.
-
-Generation expects a local Ollama model, defaulting to `mistral`.
+Generation currently uses Ollama:
 
 ```powershell
 ollama pull mistral
 ollama serve
+osu-bot query "What is osu!direct?"
 ```
 
-## Pipeline
+## Commands
 
-- `ingest`: parses English wiki pages and all news posts into structured document and hierarchical chunk JSONL artifacts.
-- `terms`: builds a legacy deterministic entity and alias dictionary for baseline/debug comparisons.
-- `links`: builds reviewable hyperlink alias artifacts from structured wiki/news links.
-- `entities`: runs experimental zero-shot entity extraction over chunks and writes reviewable generative candidates.
-- `normalize-entities`: links generative candidates to wiki pages, groups aliases, and writes reviewable normalization artifacts.
-- `stats`: summarizes document/chunk/entity counts and writes `stats_report.json`.
-- `validate`: checks structured artifacts for missing fields, empty content, duplicate IDs, malformed dates, large chunks, and noisy aliases.
-- `index`: embeds chunks with `sentence-transformers` and persists them in Qdrant.
-- `inspect`: shows detected entities and ranked retrieved chunks without calling an LLM.
-- `query`: retrieves source chunks and asks Ollama to answer only from cited context.
+- `ingest`: parse configured sources into documents and embedding-sized chunks.
+- `validate`: check generated artifacts before indexing.
+- `index`: embed chunks and upsert their vectors and complete payloads into Qdrant.
+- `inspect`: show query analysis and retrieved chunks without generation.
+- `eval`: measure document/chunk retrieval against a JSONL evaluation set.
+- `query`: retrieve evidence and ask Ollama for a cited answer.
 
-## Package Layout
+Additional `terms`, `links`, `entities`, `normalize-entities`, and `stats` commands are offline corpus-analysis utilities. They are not required by the serving path.
 
-- `osu_chatbot.domain`: shared dataclasses and artifact IO.
-- `osu_chatbot.corpus`: osu-wiki scanning, structured markdown/news parsing, taxonomy, and hierarchical chunk construction.
-- `osu_chatbot.knowledge`: terminology and hyperlink alias extraction.
-- `osu_chatbot.retrieval`: query intent, lexical scoring, dense lookup, ranking, and retrieval orchestration.
-- `osu_chatbot.indexing`: embeddings and Qdrant indexing.
-- `osu_chatbot.generation`: prompts, Ollama client, and answer orchestration.
-- `osu_chatbot.quality`: artifact statistics and validation.
-- `osu_chatbot.evaluation`: training-stage retrieval evaluation.
-- `osu_chatbot.app`: command-line entrypoint and command functions.
+## Configuration
 
-Artifacts are written to `artifacts/rag/` by default:
+The default configuration lives in `config.toml`.
 
-- `documents_structured.jsonl`
-- `chunks_hierarchical.jsonl`
-- `links_raw.jsonl`
-- `link_alias_candidates.jsonl`
-- `link_alias_review.csv`
-- `links_report.json`
-- `entity_candidates_generative.jsonl`
-- `entity_candidates_report.json`
-- `entity_normalization_candidates.jsonl`
-- `entity_normalization_review.csv`
-- `entity_normalization_report.json`
-- `ingest_report.json`
-- `stats_report.json`
-- `validation_report.json`
-- `index_report.json`
+```toml
+[embedding]
+model = "sentence-transformers/all-MiniLM-L6-v2"
 
-## Reading Validation
+[qdrant]
+url = "file://artifacts/rag/qdrant"
+collection = "osu_wiki_en_dense_v2"
+vector_size = 384
 
-`validation_report.json` is intended to separate real data-quality problems from expected corpus quirks:
-
-- `error`: fix before indexing; these indicate broken artifacts such as duplicate IDs or empty chunk text.
-- `warning`: inspect before trusting retrieval; these usually affect answer quality, such as oversized chunks.
-- `info`: useful corpus notes; these are usually safe to keep unless they point at a pattern you want to normalize.
-
-Expected wiki/news quirks such as empty layout headings, older news style differences, and very dense reference pages are mostly tracked as `info` or in `stats_report.json`.
-
-## Generative Entity Extraction
-
-The deterministic `terms` command is still available as a legacy baseline, but the recommended enrichment path is GLiNER plus normalization. Dense retrieval does not require or score `terms.json`.
-
-```powershell
-python -m pip install -e ".[dev,entities]"
-osu-bot entities --backend gliner --label-profile main-page --limit 100 --sampling balanced --threshold 0.5
+[retrieval]
+top_k = 6
 ```
 
-By default this uses a Main Page-inspired label profile with categories such as game client concepts, gameplay mechanics, beatmap editor tools, ranking concepts, help/support topics, community projects, people/user groups, developer/API topics, and wiki maintenance/style topics. For clearly clustered pages, labels are scoped from the document path, so wiki style pages are evaluated as wiki-maintenance topics instead of generic client features.
+The Qdrant URL can point to embedded storage or a remote service. Environment variables can override deployment-sensitive paths:
 
-Limited runs use balanced document sampling by default, so `--limit 100` scans across many articles instead of getting stuck in one alphabetically early article. Use `--sampling sequential` only when you intentionally want artifact-order scanning.
+- `OSU_BOT_ARTIFACT_PATH`
+- `OSU_BOT_ARTIFACT_SOURCE_PATH`
+- `OSU_BOT_QDRANT_URL`
+- `OSU_BOT_QDRANT_COLLECTION`
+- `OSU_BOT_QDRANT_VECTOR_SIZE`
 
-To compare against the older broad labels:
+## Chunking and indexing
 
-```powershell
-osu-bot entities --label-profile osu-entities --no-scoped-labels --limit 100
-```
+Section content is split with a conservative 180-token estimate and 24-token overlap before embedding. Titles, heading paths, tags, source information, and document IDs are added to the embedding input.
 
-To test a hand-picked label set:
-
-```powershell
-osu-bot entities --label "gameplay mechanic" --label "wiki style concept" --label "community user group"
-```
-
-The output is intended for review and comparison before promotion into the main knowledge layer.
-
-After extraction, normalize candidates into canonical groups:
-
-```powershell
-osu-bot normalize-entities
-```
-
-This writes `entity_normalization_review.csv` for manual review. Accepted rows are linked to a wiki page when possible; review rows are plausible but need a human decision; reject rows are generic domain words or noisy candidates.
-
-## Dense Indexing
-
-Dense indexing can be run in short, resumable intervals:
+Indexing is resumable:
 
 ```powershell
 osu-bot index --limit 2000 --batch-size 32
 osu-bot index --resume --limit 2000 --batch-size 32
 ```
 
-The indexer prints each batch range, embedding time, Qdrant upsert time, throughput, ETA, and the next resume offset. It also writes `artifacts/rag/index_state.json` after every successful batch. Qdrant point IDs are deterministic, so rerunning a slice overwrites the same chunks instead of duplicating them.
+Re-run `ingest` and rebuild the collection whenever chunking or the embedding-input version changes. Point IDs are deterministic, but using a fresh collection name makes evaluation comparisons easier.
 
-If Hugging Face throttling or model downloads are a concern, pre-download the embedding model on the machine that will index, set a persistent cache, and use a token when available:
+## Evaluation
 
-```powershell
-$env:HF_HOME = "D:\hf-cache"
-$env:HF_TOKEN = "<your token>"
-osu-bot index --limit 100 --batch-size 16
-```
-
-After the model is cached, indexing should not need repeated Hugging Face downloads unless the cache is missing or the model changes. For cluster jobs, set the embedding config to fail fast if the model is not already cached:
-
-```toml
-[embedding]
-model = "sentence-transformers/all-MiniLM-L6-v2"
-cache_folder = "D:/hf-cache"
-device = "cuda"
-local_files_only = true
-```
-
-Indexing targets Qdrant by default. Local keyword-only inspection does not require building the vector index:
+The seed set contains direct terminology, colloquial questions, and support symptoms:
 
 ```powershell
-osu-bot inspect --keyword-only "What is a beatmap?"
+osu-bot eval eval/osu_seed.jsonl
+osu-bot eval eval/osu_seed.jsonl --output artifacts/rag/eval_dense_report.json
 ```
+
+Expectations use actual corpus document IDs so the metric describes retrieval behavior without hidden topic-routing equivalences.
+
+## Package layout
+
+- `osu_chatbot.corpus`: source parsing and chunk construction.
+- `osu_chatbot.indexing`: embeddings and Qdrant indexing.
+- `osu_chatbot.retrieval`: intent hints and the replaceable dense backend.
+- `osu_chatbot.generation`: grounded prompt and Ollama generation.
+- `osu_chatbot.evaluation`: retrieval datasets and metrics.
+- `osu_chatbot.quality`: artifact validation and statistics.
+- `osu_chatbot.app`: CLI entry point.
+
+The guided Colab workflow is in `notebooks/osu_chatbot_colab_walkthrough.ipynb`.

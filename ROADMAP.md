@@ -1,53 +1,51 @@
-# osu! Chatbot Cluster Readiness Roadmap
+# osu! Chatbot MVP Roadmap
 
 ## Goal
 
-Make the RAG training, indexing, and evaluation pipeline reproducible enough to run on cluster, compare changes, and decide whether a model/retrieval update is actually better.
+Deploy a complete, understandable osu! question-answering pipeline on a DigitalOcean CPU Droplet before July 31, 2026, evaluate it with real questions, and keep it portable to another host afterward.
 
-## Phase 1: Reproducible Local Baseline
+## 1. Dense retrieval baseline
 
-- Install from the project package in the active environment: `python -m pip install -e ".[dev,entities]"`.
-- Verify local health:
-  - `python -m pytest --basetemp=.pytest_tmp`
-  - `python -m osu_chatbot.app.cli stats`
-  - `python -m osu_chatbot.app.cli validate`
-  - `python -m osu_chatbot.app.cli eval eval/osu_seed.jsonl --output artifacts/rag/eval_seed_keyword_report.json`
-- Fix environment drift before cluster work. The package declares `qdrant-client`, but dense eval currently fails when the active environment cannot import it.
+- Keep one replaceable dense retrieval backend.
+- Split source sections into embedding-sized chunks.
+- Store complete chunk payloads in Qdrant so serving does not load source JSONL artifacts.
+- Keep intent and osu! alias handling as query hints, not document-routing rules.
+- Rebuild into the `osu_wiki_en_dense_v2` collection.
+- Run `eval/osu_seed.jsonl` and inspect failures by category.
 
-## Phase 2: Full Knowledge Build
+Release gate:
 
-- Run the deterministic corpus pipeline: `ingest`, `terms`, `links`, `stats`, `validate`.
-- Run the generative NER pipeline over the full chunk artifact, not just the current 100-chunk pilot:
-  - `python -m osu_chatbot.app.cli entities --backend gliner --label-profile main-page --threshold 0.5`
-  - `python -m osu_chatbot.app.cli normalize-entities`
-- Review `entity_normalization_review.csv`, then decide which accepted/reviewed normalized aliases should be promoted into retrieval.
-- Full cluster NER should use run-isolated artifact paths. The cluster wrapper now writes NER outputs under `artifacts/runs/<run_id>/rag` while reading stable prepared inputs from `artifacts/rag`.
+- Unit suite passes.
+- Every retrieved result contains usable text, title, document ID, URL, and score.
+- Retrieval improves materially over the saved 27/70 dense baseline.
 
-## Phase 3: Retrieval Improvements
+## 2. Complete response path
 
-- Improve embedding inputs before reindexing: include title, heading path, tags, domain, subculture, and chunk text in the embedded text instead of raw chunk text only. Current implementation version: `metadata_text_v1`.
-- Add intent coverage for beginner, rules/moderation, mapping, ranking/pp, client settings, account/access, and performance troubleshooting.
-- Calibrate retrieval scoring by query type; avoid relying on a simple sum of dense, keyword, entity, and document scores for every query.
+- Put generation behind a small provider interface.
+- Keep Ollama as the first provider and allow a configurable HTTP provider later.
+- Require cited, context-grounded answers and a clear insufficient-context response.
+- Add a minimal HTTP health endpoint and chat endpoint.
+- Preserve the CLI for inspection and evaluation.
 
-## Phase 4: Dense Indexing On Cluster
+## 3. DigitalOcean build and deployment
 
-- Use `cluster/config.cluster.toml` with a server Qdrant URL for parallel jobs. Do not use file-based Qdrant for parallel HTCondor indexing.
-- Use `cluster/scripts/run.sh` for cluster tasks. It sets `OSU_BOT_ARTIFACT_SOURCE_PATH`, `OSU_BOT_ARTIFACT_PATH`, and `RUN_ID` so runs do not overwrite each other.
-- Prime the Hugging Face cache once with `local_files_only = false`, then switch production jobs to `local_files_only = true`.
-- Generate index intervals with `cluster/scripts/make_offsets.py`, submit with the HTCondor files, and save `index_report.json` plus logs for every run.
-- Rebuild the dense index after embedding input changes; existing local Qdrant data was built with the previous raw-text-only embedding input.
+- Use an eligible CPU Droplet; do not rely on GPU or excluded third-party inference credits.
+- Run ingestion and indexing on the Droplet with persistent model and Qdrant caches.
+- Start with a small quantized instruction model and measure response latency before trying a larger one.
+- Package configuration through environment variables and persistent volumes.
+- Record RAM, latency, retrieval score, and model settings for each serious run.
 
-## Phase 5: Evaluation Gate
+## 4. Real-world iteration
 
-- Run keyword and dense retrieval evals on the same dataset and save JSON reports.
-- Compare global accuracy, category accuracy, and failed examples from `top_sources`.
-- Only then compare generator/model changes, because poor retrieval will mask whether the chat model improved.
+- Collect anonymized questions, retrieved document IDs, latency, and explicit user feedback.
+- Add failed or surprising questions to a versioned evaluation set.
+- Fix query aliases, chunking, or prompts only when failures demonstrate the need.
+- Add another retrieval backend only if the dense baseline shows a repeatable class of misses.
 
-## Missing Or Easy To Forget
+## 5. Exit before July 31
 
-- A versioned eval dataset and report artifacts for every serious run.
-- A clear artifact naming convention for NER, normalized entities, indexes, and eval reports.
-- Dependency parity between local and cluster environments.
-- Qdrant server availability and collection reset policy.
-- A promotion path from normalized generative entities into the runtime term/entity layer.
-- A final answer-quality eval after retrieval eval, ideally checking citation support and refusal behavior.
+- Export a Qdrant snapshot and evaluation reports.
+- Save deployment configuration without secrets.
+- Copy required artifacts off DigitalOcean.
+- Destroy all billable Droplets, volumes, and snapshots that should not continue on standard billing.
+- Verify the DigitalOcean billing page has no unintended resources.

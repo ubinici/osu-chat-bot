@@ -30,18 +30,13 @@ class EmbeddingConfig:
 @dataclass(frozen=True)
 class QdrantConfig:
     url: str = "file://artifacts/rag/qdrant"
-    collection: str = "osu_wiki_en"
+    collection: str = "osu_wiki_en_dense_v2"
     vector_size: int = 384
 
 
 @dataclass(frozen=True)
 class RetrievalConfig:
-    dense_top_k: int = 24
-    document_top_k: int = 8
-    lane_top_k: int = 3
-    candidate_chunk_limit: int = 64
-    final_top_k: int = 6
-    use_vector_fallback: bool = False
+    top_k: int = 6
 
 
 @dataclass(frozen=True)
@@ -86,16 +81,11 @@ def load_config(path: str | Path = "config.toml") -> AppConfig:
         ),
         qdrant=QdrantConfig(
             url=os.environ.get("OSU_BOT_QDRANT_URL") or qdrant_data.get("url", "file://artifacts/rag/qdrant"),
-            collection=os.environ.get("OSU_BOT_QDRANT_COLLECTION") or qdrant_data.get("collection", "osu_wiki_en"),
+            collection=os.environ.get("OSU_BOT_QDRANT_COLLECTION") or qdrant_data.get("collection", "osu_wiki_en_dense_v2"),
             vector_size=int(os.environ.get("OSU_BOT_QDRANT_VECTOR_SIZE") or qdrant_data.get("vector_size", 384)),
         ),
         retrieval=RetrievalConfig(
-            dense_top_k=int(data.get("retrieval", {}).get("dense_top_k", 24)),
-            document_top_k=int(data.get("retrieval", {}).get("document_top_k", 8)),
-            lane_top_k=int(data.get("retrieval", {}).get("lane_top_k", 3)),
-            candidate_chunk_limit=int(data.get("retrieval", {}).get("candidate_chunk_limit", 64)),
-            final_top_k=int(data.get("retrieval", {}).get("final_top_k", 6)),
-            use_vector_fallback=bool(data.get("retrieval", {}).get("use_vector_fallback", False)),
+            top_k=int(data.get("retrieval", {}).get("top_k", 6)),
         ),
         ollama=OllamaConfig(
             url=data.get("ollama", {}).get("url", "http://127.0.0.1:11434").rstrip("/"),

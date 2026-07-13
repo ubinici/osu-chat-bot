@@ -1,4 +1,14 @@
-from osu_chatbot.corpus.chunker import build_chunks_from_record
+from osu_chatbot.corpus.chunker import build_chunks_from_record, split_text_blocks
+
+
+def test_token_overlap_does_not_create_redundant_tail_chunk() -> None:
+    text = " ".join(f"token-{index}" for index in range(313))
+
+    parts = split_text_blocks(text, max_tokens=180, overlap_tokens=24)
+
+    assert len(parts) == 2
+    assert parts[0].split()[-24:] == parts[1].split()[:24]
+    assert parts[1].split()[-1] == "token-312"
 
 
 def test_hierarchical_chunks_include_article_section_table_formula_and_citation() -> None:
@@ -50,12 +60,13 @@ def test_oversized_sections_are_split_with_part_metadata() -> None:
         ],
     }
 
-    chunks = build_chunks_from_record(record, max_chunk_chars=1200)
+    chunks = build_chunks_from_record(record, max_chunk_tokens=40, chunk_overlap_tokens=5)
     section_chunks = [chunk for chunk in chunks if chunk.metadata["chunk_type"] == "section"]
 
     assert len(section_chunks) > 1
-    assert all(len(chunk.text) < 1500 for chunk in section_chunks)
+    assert all(len(chunk.text.split()) <= 50 for chunk in section_chunks)
     assert {chunk.metadata.get("chunk_part_count") for chunk in section_chunks} == {len(section_chunks)}
+    assert {chunk.metadata.get("original_token_count") for chunk in section_chunks} == {960}
 
 
 def test_large_tables_are_split_without_omitting_rows() -> None:
@@ -82,7 +93,7 @@ def test_large_tables_are_split_without_omitting_rows() -> None:
         ],
     }
 
-    chunks = build_chunks_from_record(record, max_table_rows=2, max_chunk_chars=1200)
+    chunks = build_chunks_from_record(record, max_table_rows=2, max_chunk_tokens=40, chunk_overlap_tokens=5)
     table_chunks = [chunk for chunk in chunks if chunk.metadata["chunk_type"] == "table"]
     text = "\n".join(chunk.text for chunk in table_chunks)
 

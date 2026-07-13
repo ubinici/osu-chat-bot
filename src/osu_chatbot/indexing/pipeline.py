@@ -12,7 +12,7 @@ from .embeddings import SentenceTransformerEmbeddings
 from .vector_store import qdrant_client, qdrant_payload
 
 STATE_FILE = INDEX_STATE_FILE
-EMBEDDING_INPUT_VERSION = "metadata_text_v1"
+EMBEDDING_INPUT_VERSION = "metadata_text_token_chunks_v2"
 
 
 @dataclass(frozen=True)

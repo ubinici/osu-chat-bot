@@ -1,9 +1,12 @@
 from __future__ import annotations
 
 from typing import Any, Iterable
-import re
 
 from ..domain.models import Chunk
+
+
+DEFAULT_MAX_CHUNK_TOKENS = 180
+DEFAULT_CHUNK_OVERLAP_TOKENS = 24
 
 
 def build_chunks_from_record(
@@ -11,8 +14,13 @@ def build_chunks_from_record(
     *,
     max_table_rows: int = 40,
     max_intro_chars: int = 1400,
-    max_chunk_chars: int = 7000,
+    max_chunk_tokens: int = DEFAULT_MAX_CHUNK_TOKENS,
+    chunk_overlap_tokens: int = DEFAULT_CHUNK_OVERLAP_TOKENS,
 ) -> list[Chunk]:
+    if max_chunk_tokens <= 0:
+        raise ValueError("max_chunk_tokens must be greater than zero.")
+    if chunk_overlap_tokens < 0 or chunk_overlap_tokens >= max_chunk_tokens:
+        raise ValueError("chunk_overlap_tokens must be between zero and max_chunk_tokens.")
     root_id, root_kind = resolve_root_id(record)
     source_type = "news" if record.get("source") == "osu-news" else "wiki"
     title = str(record.get("title") or root_id)
@@ -26,7 +34,11 @@ def build_chunks_from_record(
         section_id = str(section.get("section_id") or "").strip()
         section_text = str(section.get("text") or "").strip()
         if section_id and section_text:
-            section_parts = split_text_blocks(section_text, max_chars=max_chunk_chars - 300)
+            section_parts = split_text_blocks(
+                section_text,
+                max_tokens=max_chunk_tokens,
+                overlap_tokens=chunk_overlap_tokens,
+            )
             metadata = {
                 **base,
                 "chunk_type": "section",
@@ -50,6 +62,7 @@ def build_chunks_from_record(
                         "chunk_part_index": part_index,
                         "chunk_part_count": len(section_parts),
                         "original_char_count": len(section_text),
+                        "original_token_count": token_count(section_text),
                     }
                 chunks.append(
                     make_chunk(
@@ -73,7 +86,7 @@ def build_chunks_from_record(
                 str(section.get("title") or section_id),
                 table,
                 max_rows=max_table_rows,
-                max_chars=max_chunk_chars,
+                max_tokens=max_chunk_tokens,
             )
             for part_index, table_part in enumerate(table_parts, start=1):
                 chunks.append(
@@ -230,11 +243,24 @@ def build_section_text(title: str, section_title: str, heading_path: list[str], 
 
 
 def build_table_text(title: str, section_title: str, table: dict[str, Any], max_rows: int) -> str:
-    parts = build_table_text_parts(title, section_title, table, max_rows=max_rows, max_chars=7000)
+    parts = build_table_text_parts(
+        title,
+        section_title,
+        table,
+        max_rows=max_rows,
+        max_tokens=DEFAULT_MAX_CHUNK_TOKENS,
+    )
     return parts[0] if parts else ""
 
 
-def build_table_text_parts(title: str, section_title: str, table: dict[str, Any], *, max_rows: int, max_chars: int) -> list[str]:
+def build_table_text_parts(
+    title: str,
+    section_title: str,
+    table: dict[str, Any],
+    *,
+    max_rows: int,
+    max_tokens: int,
+) -> list[str]:
     headers = safe_str_list(table.get("headers"))
     rows = table.get("rows", [])
     if not isinstance(rows, list):
@@ -266,10 +292,11 @@ def build_table_text_parts(title: str, section_title: str, table: dict[str, Any]
         if pairs:
             row_line = f"Row {index}: " + "; ".join(pairs)
             projected = "\n".join([*part_lines, row_line]).strip()
-            if rows_in_part and (rows_in_part >= max_rows or len(projected) > max_chars):
+            if rows_in_part and (rows_in_part >= max_rows or token_count(projected) > max_tokens):
                 flush()
-            if len(row_line) > max_chars:
-                for row_part in split_text_blocks(row_line, max_chars=max_chars - len("\n".join(prefix)) - 20):
+            available_tokens = max(1, max_tokens - token_count("\n".join(prefix)))
+            if token_count(row_line) > available_tokens:
+                for row_part in split_text_blocks(row_line, max_tokens=available_tokens):
                     part_lines.append(row_part)
                     rows_in_part = 1
                     flush()
@@ -280,63 +307,35 @@ def build_table_text_parts(title: str, section_title: str, table: dict[str, Any]
     return parts
 
 
-def split_text_blocks(text: str, *, max_chars: int) -> list[str]:
+def split_text_blocks(text: str, *, max_tokens: int, overlap_tokens: int = 0) -> list[str]:
     text = text.strip()
     if not text:
         return []
-    max_chars = max(1200, max_chars)
-    if len(text) <= max_chars:
+    if max_tokens <= 0:
+        raise ValueError("max_tokens must be greater than zero.")
+    if overlap_tokens < 0 or overlap_tokens >= max_tokens:
+        raise ValueError("overlap_tokens must be between zero and max_tokens.")
+
+    tokens = text.split()
+    if len(tokens) <= max_tokens:
         return [text]
 
-    blocks = _paragraph_blocks(text)
+    step = max_tokens - overlap_tokens
     parts: list[str] = []
-    current: list[str] = []
-    current_len = 0
-    for block in blocks:
-        block_parts = _split_long_block(block, max_chars=max_chars) if len(block) > max_chars else [block]
-        for block_part in block_parts:
-            separator_len = 2 if current else 0
-            if current and current_len + separator_len + len(block_part) > max_chars:
-                parts.append("\n\n".join(current).strip())
-                current = []
-                current_len = 0
-            current.append(block_part)
-            current_len += (2 if current_len else 0) + len(block_part)
-    if current:
-        parts.append("\n\n".join(current).strip())
-    return [part for part in parts if part]
-
-
-def _paragraph_blocks(text: str) -> list[str]:
-    return [block.strip() for block in re.split(r"\n\s*\n", text) if block.strip()]
-
-
-def _split_long_block(block: str, *, max_chars: int) -> list[str]:
-    lines = [line.rstrip() for line in block.splitlines() if line.strip()]
-    if len(lines) > 1:
-        return split_text_blocks("\n\n".join(lines), max_chars=max_chars)
-
-    words = block.split()
-    parts: list[str] = []
-    current: list[str] = []
-    current_len = 0
-    for word in words:
-        if current and current_len + 1 + len(word) > max_chars:
-            parts.append(" ".join(current))
-            current = []
-            current_len = 0
-        if len(word) > max_chars:
-            if current:
-                parts.append(" ".join(current))
-                current = []
-                current_len = 0
-            parts.extend(word[index : index + max_chars] for index in range(0, len(word), max_chars))
-            continue
-        current.append(word)
-        current_len += (1 if current_len else 0) + len(word)
-    if current:
-        parts.append(" ".join(current))
+    start = 0
+    while start < len(tokens):
+        end = min(start + max_tokens, len(tokens))
+        parts.append(" ".join(tokens[start:end]))
+        if end == len(tokens):
+            break
+        start += step
     return parts
+
+
+def token_count(text: str) -> int:
+    """Cheap model-independent token estimate used to cap embedding inputs."""
+
+    return len(text.split())
 
 
 def resolve_root_id(record: dict[str, Any]) -> tuple[str, str]:

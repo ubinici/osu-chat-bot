@@ -52,6 +52,17 @@ DEFINITION_PATTERNS = [
     re.compile(r"\bdefine\b", re.IGNORECASE),
     re.compile(r"\bmeaning\s+of\b", re.IGNORECASE),
 ]
+OSU_QUERY_ALIASES = {
+    "ar": {"approach", "rate"},
+    "dt": {"double", "time", "mod"},
+    "hd": {"hidden", "mod"},
+    "hp": {"health", "drain"},
+    "hr": {"hard", "rock", "mod"},
+    "map": {"beatmap"},
+    "mapper": {"beatmap", "creator"},
+    "od": {"overall", "difficulty", "timing", "window"},
+    "pp": {"performance", "points"},
+}
 
 
 def classify_query(query: str) -> QueryIntent:
@@ -59,18 +70,17 @@ def classify_query(query: str) -> QueryIntent:
     tokens = {normalize_token(token) for token in raw_tokens}
     labels: set[str] = set()
     expanded_terms = set(tokens)
-    document_hints: dict[str, float] = {}
+
+    for token in tokens:
+        expanded_terms.update(OSU_QUERY_ALIASES.get(token, set()))
 
     if raw_tokens.intersection(TROUBLESHOOTING_TERMS) or tokens.intersection(TROUBLESHOOTING_TERMS):
         labels.add("troubleshooting")
         expanded_terms.update({"help", "issue", "problem", "troubleshooting"})
-        document_hints["Help_centre"] = max(document_hints.get("Help_centre", 0.0), 4.0)
 
     if raw_tokens.intersection(PERFORMANCE_TERMS) or tokens.intersection(PERFORMANCE_TERMS):
         labels.update({"troubleshooting", "performance"})
         expanded_terms.update({"lag", "performance", "frame", "fps", "latency", "stutter", "troubleshooting"})
-        document_hints["Performance_troubleshooting"] = max(document_hints.get("Performance_troubleshooting", 0.0), 14.0)
-        document_hints["Help_centre/Client"] = max(document_hints.get("Help_centre/Client", 0.0), 4.0)
 
     if raw_tokens.intersection(ACCESS_TERMS) or tokens.intersection(ACCESS_TERMS):
         labels.add("access")
@@ -79,7 +89,17 @@ def classify_query(query: str) -> QueryIntent:
     if any(pattern.search(query) for pattern in DEFINITION_PATTERNS):
         labels.add("definition")
 
-    return QueryIntent(labels=labels, expanded_terms={term for term in expanded_terms if term}, document_hints=document_hints)
+    return QueryIntent(labels=labels, expanded_terms={term for term in expanded_terms if term})
+
+
+def build_retrieval_query(query: str, intent: QueryIntent) -> str:
+    """Add small, deterministic osu! hints while preserving the user's wording."""
+
+    query_terms = {normalize_token(token) for token in TOKEN_RE.findall(query)}
+    hints = sorted(term for term in intent.expanded_terms if term not in query_terms)
+    if not hints:
+        return query
+    return f"{query}\nRelated osu! terms: {', '.join(hints)}"
 
 
 def normalize_token(token: str) -> str:

@@ -6,8 +6,8 @@
 {"category": "gameplay", "question": "why does this map feel so unforgiving even when I barely miss the timing?", "expected_document_ids": ["Beatmap/Overall_difficulty"]}
 {"category": "gameplay", "question": "what is star rating supposed to tell me?", "expected_document_ids": ["Beatmap/Star_rating"]}
 {"category": "gameplay", "question": "how can a map be 6 stars if the song itself does not sound that hard?", "expected_document_ids": ["Beatmap/Star_rating"]}
-{"category": "gameplay", "question": "what is HP drain and why does my health disappear so fast?", "expected_document_ids": ["Beatmap/Health_drain", "Beatmap/Drain_time"]}
-{"category": "gameplay", "question": "why do I lose health even when I am still playing most of the notes?", "expected_document_ids": ["Beatmap/Health_drain"]}
+{"category": "gameplay", "question": "what is HP drain and why does my health disappear so fast?", "expected_document_ids": ["Beatmap/HP_drain_rate", "Beatmap/Drain_time"]}
+{"category": "gameplay", "question": "why do I lose health even when I am still playing most of the notes?", "expected_document_ids": ["Beatmap/HP_drain_rate"]}
 {"category": "gameplay", "question": "what does drain time mean on a map page?", "expected_document_ids": ["Beatmap/Drain_time"]}
 {"category": "gameplay", "question": "what is play time counting exactly?", "expected_document_ids": ["Beatmap/Play_time"]}
 {"category": "gameplay", "question": "why does the map give me a break in the middle of the song?", "expected_document_ids": ["Beatmap/Break"]}
@@ -55,8 +55,8 @@
 {"category": "rules", "question": "what kind of stuff can get me restricted or banned?", "expected_document_ids": ["Rules"]}
 {"category": "rules", "question": "someone is being awful in chat, where do I report that?", "expected_document_ids": ["Reporting_bad_behaviour", "Rules"]}
 {"category": "rules", "question": "how do I report bad behaviour without making things worse?", "expected_document_ids": ["Reporting_bad_behaviour"]}
-{"category": "chat", "question": "how does chat work in osu?", "expected_document_ids": ["Chat_console"]}
-{"category": "chat", "question": "where do I type commands or message people in game?", "expected_document_ids": ["Chat_console"]}
+{"category": "chat", "question": "how does chat work in osu?", "expected_document_ids": ["Client/Interface/Chat_console"]}
+{"category": "chat", "question": "where do I type commands or message people in game?", "expected_document_ids": ["Client/Interface/Chat_console"]}
 {"category": "chat", "question": "who or what is BanchoBot?", "expected_document_ids": ["BanchoBot"]}
 {"category": "chat", "question": "why is a bot replying to me in osu chat?", "expected_document_ids": ["BanchoBot"]}
 {"category": "history", "question": "who created the game?", "expected_document_ids": ["History_of_osu!"]}

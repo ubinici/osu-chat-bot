@@ -1,285 +1,106 @@
-from pathlib import Path
+from types import SimpleNamespace
 
-from osu_chatbot.config import AppConfig, ArtifactConfig, RetrievalConfig
-from osu_chatbot.domain.artifacts import write_json, write_jsonl
-from osu_chatbot.domain.models import Chunk, Entity
+from osu_chatbot.config import AppConfig, QdrantConfig, RetrievalConfig
+from osu_chatbot.domain.models import Chunk, SearchResult
+from osu_chatbot.retrieval.dense import DenseRetriever, chunk_from_payload
 from osu_chatbot.retrieval.service import Retriever
 
 
-def test_keyword_retrieval_prefers_matching_title_and_entity(tmp_path: Path) -> None:
-    artifact_dir = tmp_path / "rag"
-    chunks = [
-        Chunk(
-            id="beatmap-1",
-            document_id="beatmap",
-            source_type="wiki",
-            file_path="wiki/Beatmap/en.md",
-            osu_url="https://osu.ppy.sh/wiki/en/Beatmap",
-            title="Beatmap",
-            text="A beatmap is a set of game levels composed of hit objects.",
-            chunk_index=0,
-            heading_path=["Beatmap"],
-            tags=["mapset"],
-        ),
-        Chunk(
-            id="chat-1",
-            document_id="chat",
-            source_type="wiki",
-            file_path="wiki/Chat_console/en.md",
-            osu_url="https://osu.ppy.sh/wiki/en/Chat_console",
-            title="Chat console",
-            text="The chat console lets players communicate.",
-            chunk_index=0,
-            heading_path=["Chat console"],
-        ),
-    ]
-    write_jsonl(artifact_dir / "chunks_hierarchical.jsonl", chunks)
-    write_jsonl(artifact_dir / "documents_structured.jsonl", [])
-    write_json(
-        artifact_dir / "terms.json",
-        [Entity(canonical="Beatmap", aliases=["Beatmap", "beatmap"], sources=["fixture"], score=2.0).__dict__],
+def chunk(chunk_id: str = "beatmap::article") -> Chunk:
+    return Chunk(
+        id=chunk_id,
+        document_id="Beatmap",
+        source_type="wiki",
+        file_path="Beatmap/en.md",
+        osu_url="https://osu.ppy.sh/wiki/en/Beatmap",
+        title="Beatmap",
+        text="A beatmap contains the hit objects used during play.",
+        chunk_index=0,
+        heading_path=["Beatmap"],
+        metadata={"chunk_type": "article", "domain": "beatmap"},
     )
-    config = AppConfig(artifacts=ArtifactConfig(path=artifact_dir), retrieval=RetrievalConfig(final_top_k=1))
-
-    _, results = Retriever(config, use_dense=False).search("What is a beatmap?")
-
-    assert results[0].chunk.id == "beatmap-1"
 
 
-def test_document_retrieval_routes_help_issue_queries_to_help_centre_family(tmp_path: Path) -> None:
-    artifact_dir = tmp_path / "rag"
-    chunks = [
-        Chunk(
-            id="help-article",
-            document_id="Help_centre",
-            source_type="wiki",
-            file_path="Help_centre/en.md",
-            osu_url="https://osu.ppy.sh/wiki/en/Help_centre",
-            title="Help centre",
-            text="Find support for common issues and missing information.",
-            chunk_index=0,
-            heading_path=["Help centre"],
-            tags=["help", "issue", "problem"],
-            metadata={"chunk_type": "article"},
-        ),
-        Chunk(
-            id="client-article",
-            document_id="Help_centre/Client",
-            source_type="wiki",
-            file_path="Help_centre/Client/en.md",
-            osu_url="https://osu.ppy.sh/wiki/en/Help_centre/Client",
-            title="Client",
-            text="Troubleshooting crashes, freezes, updates, connection problems, and lag.",
-            chunk_index=0,
-            heading_path=["Client"],
-            tags=["bug", "crash", "freeze", "update", "lag"],
-            metadata={"chunk_type": "article"},
-        ),
-        Chunk(
-            id="beatmap-article",
-            document_id="Beatmap",
-            source_type="wiki",
-            file_path="Beatmap/en.md",
-            osu_url="https://osu.ppy.sh/wiki/en/Beatmap",
-            title="Beatmap",
-            text="A beatmap is a set of game levels.",
-            chunk_index=0,
-            heading_path=["Beatmap"],
-            metadata={"chunk_type": "article"},
-        ),
-    ]
-    documents = [
-        {
-            "source": "osu-wiki",
-            "page_id": "Help_centre",
-            "title": "Help centre",
-            "repo_rel_path": "Help_centre/en.md",
-            "tags": ["help", "issue", "problem", "trouble", "missing"],
-            "domain": "help_centre",
-            "subculture": "help",
-        },
-        {
-            "source": "osu-wiki",
-            "page_id": "Help_centre/Client",
-            "title": "Client",
-            "repo_rel_path": "Help_centre/Client/en.md",
-            "tags": ["bug", "crash", "freeze", "update", "lag"],
-            "domain": "help_centre",
-            "subculture": "help",
-        },
-        {
-            "source": "osu-wiki",
-            "page_id": "Beatmap",
-            "title": "Beatmap",
-            "repo_rel_path": "Beatmap/en.md",
-            "tags": [],
-            "domain": "beatmap",
-        },
-    ]
-    write_jsonl(artifact_dir / "chunks_hierarchical.jsonl", chunks)
-    write_jsonl(artifact_dir / "documents_structured.jsonl", documents)
-    config = AppConfig(artifacts=ArtifactConfig(path=artifact_dir), retrieval=RetrievalConfig(final_top_k=2))
+def test_dense_retriever_returns_self_contained_qdrant_payloads() -> None:
+    class FakeEmbedder:
+        def encode(self, texts):
+            assert texts == ["What is a beatmap?"]
+            return [[0.1, 0.2, 0.3]]
 
-    _, results = Retriever(config, use_dense=False).search("I need help with client issues")
-
-    assert {result.chunk.id for result in results} == {"client-article", "help-article"}
-    assert all(result.document_score > 0 for result in results)
-
-
-def test_document_retrieval_routes_lag_queries_to_performance_troubleshooting(tmp_path: Path) -> None:
-    artifact_dir = tmp_path / "rag"
-    chunks = [
-        Chunk(
-            id="performance-low-frame-rate",
-            document_id="Performance_troubleshooting",
-            source_type="wiki",
-            file_path="Performance_troubleshooting/en.md",
-            osu_url="https://osu.ppy.sh/wiki/en/Performance_troubleshooting",
-            title="osu! performance troubleshooting",
-            text="During gameplay, the frame rate is unable to keep up, resulting in lag.",
-            chunk_index=0,
-            heading_path=["osu! performance troubleshooting", "The types of lag", "Low frame rate"],
-            metadata={"chunk_type": "section"},
-        ),
-        Chunk(
-            id="client-article",
-            document_id="Help_centre/Client",
-            source_type="wiki",
-            file_path="Help_centre/Client/en.md",
-            osu_url="https://osu.ppy.sh/wiki/en/Help_centre/Client",
-            title="Client",
-            text="Troubleshooting common client issues.",
-            chunk_index=0,
-            heading_path=["Client"],
-            tags=["game", "performance", "lag"],
-            metadata={"chunk_type": "article"},
-        ),
-    ]
-    documents = [
-        {
-            "source": "osu-wiki",
-            "page_id": "Performance_troubleshooting",
-            "title": "osu! performance troubleshooting",
-            "repo_rel_path": "Performance_troubleshooting/en.md",
-            "tags": [],
-            "domain": "performance_troubleshooting",
-            "subculture": "help",
-            "sections": [
-                {"title": "The types of lag", "heading_path": ["osu! performance troubleshooting", "The types of lag"]},
-                {"title": "Low frame rate", "heading_path": ["osu! performance troubleshooting", "The types of lag", "Low frame rate"]},
-            ],
-        },
-        {
-            "source": "osu-wiki",
-            "page_id": "Help_centre/Client",
-            "title": "Client",
-            "repo_rel_path": "Help_centre/Client/en.md",
-            "tags": ["game", "performance", "lag"],
-            "domain": "help_centre",
-            "subculture": "client",
-        },
-    ]
-    write_jsonl(artifact_dir / "chunks_hierarchical.jsonl", chunks)
-    write_jsonl(artifact_dir / "documents_structured.jsonl", documents)
-    config = AppConfig(artifacts=ArtifactConfig(path=artifact_dir), retrieval=RetrievalConfig(final_top_k=1))
-
-    _, results = Retriever(config, use_dense=False).search("the game is lagging a lot, how do I fix this")
-
-    assert results[0].chunk.id == "performance-low-frame-rate"
-    assert results[0].document_score > 0
-
-
-def test_router_limits_snippet_ranking_to_selected_documents(tmp_path: Path) -> None:
-    artifact_dir = tmp_path / "rag"
-    chunks = [
-        Chunk(
-            id="ar-article",
-            document_id="Beatmap/Approach_rate",
-            source_type="wiki",
-            file_path="Beatmap/Approach_rate/en.md",
-            osu_url="https://osu.ppy.sh/wiki/en/Beatmap/Approach_rate",
-            title="Approach rate",
-            text="Approach rate controls how long hit objects are visible before they must be hit.",
-            chunk_index=0,
-            heading_path=["Approach rate"],
-            metadata={"chunk_type": "article"},
-        ),
-        Chunk(
-            id="unrelated-many-keywords",
-            document_id="Unrelated",
-            source_type="wiki",
-            file_path="Unrelated/en.md",
-            osu_url="https://osu.ppy.sh/wiki/en/Unrelated",
-            title="Unrelated",
-            text="AR AR AR AR map change change change.",
-            chunk_index=0,
-            heading_path=["Unrelated"],
-            metadata={"chunk_type": "article"},
-        ),
-    ]
-    documents = [
-        {
-            "source": "osu-wiki",
-            "page_id": "Beatmap/Approach_rate",
-            "title": "Approach rate",
-            "repo_rel_path": "Beatmap/Approach_rate/en.md",
-            "sections": [{"title": "Approach rate", "heading_path": ["Approach rate"]}],
-        },
-        {
-            "source": "osu-wiki",
-            "page_id": "Unrelated",
-            "title": "Unrelated",
-            "repo_rel_path": "Unrelated/en.md",
-            "sections": [{"title": "Unrelated", "heading_path": ["Unrelated"]}],
-        },
-    ]
-    write_jsonl(artifact_dir / "chunks_hierarchical.jsonl", chunks)
-    write_jsonl(artifact_dir / "documents_structured.jsonl", documents)
-    config = AppConfig(artifacts=ArtifactConfig(path=artifact_dir), retrieval=RetrievalConfig(final_top_k=2))
-
-    _, results = Retriever(config).search("what does AR change?")
-
-    assert [result.chunk.id for result in results] == ["ar-article"]
-
-
-def test_default_retrieval_does_not_instantiate_dense_retriever(tmp_path: Path, monkeypatch) -> None:
-    artifact_dir = tmp_path / "rag"
-    chunks = [
-        Chunk(
-            id="beatmap::article",
-            document_id="Beatmap",
-            source_type="wiki",
-            file_path="Beatmap/en.md",
-            osu_url="https://osu.ppy.sh/wiki/en/Beatmap",
-            title="Beatmap",
-            text="A beatmap is a set of game levels.",
-            chunk_index=0,
-            heading_path=["Beatmap"],
-            metadata={"chunk_type": "article"},
-        )
-    ]
-    write_jsonl(artifact_dir / "chunks_hierarchical.jsonl", chunks)
-    write_jsonl(
-        artifact_dir / "documents_structured.jsonl",
-        [
-            {
-                "source": "osu-wiki",
-                "page_id": "Beatmap",
-                "title": "Beatmap",
-                "repo_rel_path": "Beatmap/en.md",
-                "sections": [{"title": "Beatmap", "heading_path": ["Beatmap"]}],
+    class FakeClient:
+        def query_points(self, **kwargs):
+            assert kwargs == {
+                "collection_name": "test_collection",
+                "query": [0.1, 0.2, 0.3],
+                "limit": 2,
+                "with_payload": True,
             }
-        ],
+            return SimpleNamespace(
+                points=[
+                    SimpleNamespace(
+                        score=0.91,
+                        payload={
+                            "chunk_id": "beatmap::article",
+                            "document_id": "Beatmap",
+                            "source_type": "wiki",
+                            "file_path": "Beatmap/en.md",
+                            "osu_url": "https://osu.ppy.sh/wiki/en/Beatmap",
+                            "title": "Beatmap",
+                            "text": "A beatmap contains hit objects.",
+                            "chunk_index": 0,
+                            "heading_path": ["Beatmap"],
+                            "tags": ["mapping"],
+                            "chunk_type": "article",
+                            "domain": "beatmap",
+                        },
+                    )
+                ]
+            )
+
+    config = AppConfig(qdrant=QdrantConfig(collection="test_collection"))
+    results = DenseRetriever(config, embedder=FakeEmbedder(), client=FakeClient()).search(
+        "What is a beatmap?",
+        limit=2,
     )
 
-    def fail_if_constructed(*args, **kwargs):
-        raise AssertionError("dense retriever should not be constructed by default")
+    assert len(results) == 1
+    assert results[0].score == 0.91
+    assert results[0].chunk.document_id == "Beatmap"
+    assert results[0].chunk.metadata == {"chunk_type": "article", "domain": "beatmap"}
 
-    monkeypatch.setattr("osu_chatbot.retrieval.service.DenseRetriever", fail_if_constructed)
-    config = AppConfig(artifacts=ArtifactConfig(path=artifact_dir), retrieval=RetrievalConfig(final_top_k=1))
 
-    _, results = Retriever(config).search("What is a beatmap?")
+def test_chunk_from_payload_rejects_incomplete_search_results() -> None:
+    try:
+        chunk_from_payload({"chunk_id": "missing-text", "document_id": "Beatmap"})
+    except ValueError as exc:
+        assert "missing" in str(exc).casefold()
+    else:
+        raise AssertionError("invalid payload should not become a chunk")
 
-    assert results[0].chunk.id == "beatmap::article"
-    assert results[0].retrieval_lane == "canonical"
-    assert results[0].trust_tier == "canonical"
+
+def test_retriever_expands_osu_aliases_and_delegates_to_backend() -> None:
+    class FakeBackend:
+        def __init__(self):
+            self.calls = []
+
+        def search(self, query: str, limit: int):
+            self.calls.append((query, limit))
+            return [SearchResult(chunk=chunk(), score=0.8)]
+
+    backend = FakeBackend()
+    config = AppConfig(retrieval=RetrievalConfig(top_k=4))
+    retriever = Retriever(config, backend=backend)
+
+    results = retriever.search("what does AR change?")
+
+    assert results[0].chunk.document_id == "Beatmap"
+    assert backend.calls == [("what does AR change?\nRelated osu! terms: approach, rate", 4)]
+    assert retriever.last_intent.labels == set()
+
+
+def test_retriever_does_not_call_backend_for_blank_query() -> None:
+    class FailBackend:
+        def search(self, query: str, limit: int):
+            raise AssertionError("backend should not be called")
+
+    assert Retriever(AppConfig(), backend=FailBackend()).search("   ") == []

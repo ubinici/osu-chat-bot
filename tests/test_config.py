@@ -17,12 +17,7 @@ collection = "old_collection"
 vector_size = 384
 
 [retrieval]
-dense_top_k = 11
-document_top_k = 7
-lane_top_k = 2
-candidate_chunk_limit = 22
-final_top_k = 3
-use_vector_fallback = true
+top_k = 3
 """.strip(),
         encoding="utf-8",
     )
@@ -39,9 +34,4 @@ use_vector_fallback = true
     assert config.qdrant.url == "http://qdrant:6333"
     assert config.qdrant.collection == "osu_wiki_en_test"
     assert config.qdrant.vector_size == 768
-    assert config.retrieval.dense_top_k == 11
-    assert config.retrieval.document_top_k == 7
-    assert config.retrieval.lane_top_k == 2
-    assert config.retrieval.candidate_chunk_limit == 22
-    assert config.retrieval.final_top_k == 3
-    assert config.retrieval.use_vector_fallback is True
+    assert config.retrieval.top_k == 3

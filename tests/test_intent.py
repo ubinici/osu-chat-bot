@@ -6,8 +6,7 @@ def test_classify_troubleshooting_performance_query() -> None:
 
     assert "troubleshooting" in intent.labels
     assert "performance" in intent.labels
-    assert "lag" in intent.expanded_terms
-    assert intent.document_hints["Performance_troubleshooting"] > intent.document_hints["Help_centre/Client"]
+    assert {"lag", "fps", "stutter", "troubleshooting"} <= intent.expanded_terms
 
 
 def test_classify_access_query() -> None:

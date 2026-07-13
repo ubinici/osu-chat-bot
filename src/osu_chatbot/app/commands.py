@@ -7,8 +7,6 @@ from ..corpus.chunker import build_chunks
 from ..corpus.parser import parse_news_file, parse_wiki_file
 from ..corpus.sources import iter_news_files, iter_wiki_files
 from ..domain.artifacts import (
-    CANONICAL_TOPICS_FILE,
-    CANONICAL_TOPICS_REPORT_FILE,
     CHUNKS_FILE,
     DOCUMENTS_FILE,
     INGEST_REPORT_FILE,
@@ -18,12 +16,9 @@ from ..domain.artifacts import (
     ENTITY_NORMALIZATION_FILE,
     ENTITY_NORMALIZATION_REPORT_FILE,
     ENTITY_NORMALIZATION_REVIEW_FILE,
-    DOCUMENT_ALIASES_FILE,
-    DOCUMENT_ALIASES_REPORT_FILE,
     STATS_REPORT_FILE,
     TERMS_FILE,
     VALIDATION_REPORT_FILE,
-    load_chunks,
     write_json,
     write_jsonl,
 )
@@ -31,8 +26,6 @@ from ..evaluation.runner import run_evaluation
 from ..generation.answerer import answer_question
 from ..indexing.pipeline import IndexOptions, build_index
 from ..knowledge.links import build_link_artifacts
-from ..knowledge.aliases import build_document_alias_artifacts
-from ..knowledge.topics import build_canonical_topic_artifacts
 from ..knowledge.ner import build_entity_candidates_from_artifacts
 from ..knowledge.normalization import build_entity_normalization_artifacts
 from ..knowledge.terms import build_terms_from_artifacts
@@ -107,34 +100,6 @@ def run_links(config: AppConfig) -> int:
         f"rejected={report['rejected_candidates']}"
     )
     print(f"Artifacts: {config.artifacts.path / LINK_ALIAS_REVIEW_FILE}")
-    return 0
-
-
-def run_aliases(config: AppConfig) -> int:
-    input_artifact_dir = artifact_read_path(config)
-    output_artifact_dir = config.artifacts.path
-    build_canonical_topic_artifacts(input_artifact_dir, output_dir=output_artifact_dir)
-    report = build_document_alias_artifacts(input_artifact_dir, output_dir=output_artifact_dir)
-    print(f"Aliases: {report['aliases']}")
-    print(f"Topics: {report['topics']}")
-    print(f"  by source: {_format_counts(report['by_source'])}")
-    print(f"  by lane: {_format_counts(report['by_retrieval_lane'])}")
-    print(f"Artifact: {output_artifact_dir / DOCUMENT_ALIASES_FILE}")
-    print(f"Report: {output_artifact_dir / DOCUMENT_ALIASES_REPORT_FILE}")
-    return 0
-
-
-def run_topics(config: AppConfig) -> int:
-    input_artifact_dir = artifact_read_path(config)
-    output_artifact_dir = config.artifacts.path
-    report = build_canonical_topic_artifacts(input_artifact_dir, output_dir=output_artifact_dir)
-    print(f"Topics: {report['topics']}")
-    print(f"Document links: {report['document_links']}")
-    print(f"Equivalent IDs: {report['equivalent_document_ids']}")
-    print(f"  by source: {_format_counts(report['by_source'])}")
-    print(f"  by lane: {_format_counts(report['by_retrieval_lane'])}")
-    print(f"Artifact: {output_artifact_dir / CANONICAL_TOPICS_FILE}")
-    print(f"Report: {output_artifact_dir / CANONICAL_TOPICS_REPORT_FILE}")
     return 0
 
 
@@ -237,39 +202,28 @@ def run_index(config: AppConfig, *, batch_size: int, offset: int, limit: int | N
     return 0
 
 
-def run_inspect(config: AppConfig, question: str, *, keyword_only: bool = False, use_vectors: bool = False) -> int:
-    ensure_query_artifacts(config)
-    retriever = Retriever(config, use_vectors=use_vectors and not keyword_only)
-    entities, results = retriever.search(question)
-    print_document_candidates(retriever.last_document_candidates)
-    print_entities(entities)
+def run_inspect(config: AppConfig, question: str) -> int:
+    retriever = Retriever(config)
+    results = retriever.search(question)
+    labels = ", ".join(sorted(retriever.last_intent.labels)) or "general"
+    print(f"Intent: {labels}")
+    if retriever.last_search_query != question:
+        print(f"Search query: {retriever.last_search_query}")
     for rank, result in enumerate(results, start=1):
         chunk = result.chunk
         heading = " > ".join(chunk.heading_path) if chunk.heading_path else chunk.title
         chunk_type = chunk.metadata.get("chunk_type", "chunk")
         source = chunk.metadata.get("source", chunk.source_type)
-        print(
-            f"\n[{rank}] rank={result.score:.3f} "
-            f"dense={result.dense_score:.3f} "
-            f"keyword={result.keyword_score:.3f} "
-            f"entity={result.entity_score:.3f} "
-            f"doc={result.document_score:.3f}"
-        )
-        topic = result.topic_id or chunk.document_id
-        print(
-            f"{chunk.title} | {heading} | {source}/{chunk_type} | "
-            f"{result.retrieval_lane}/{result.trust_tier} | topic={topic}"
-        )
+        print(f"\n[{rank}] score={result.score:.3f}")
+        print(f"{chunk.title} | {heading} | {source}/{chunk_type} | document={chunk.document_id}")
         print(chunk.osu_url)
         print(_preview(chunk.text))
     return 0
 
 
-def run_query(config: AppConfig, question: str, *, keyword_only: bool = False, use_vectors: bool = False) -> int:
-    ensure_query_artifacts(config)
-    retriever = Retriever(config, use_vectors=use_vectors and not keyword_only)
-    entities, results = retriever.search(question)
-    print_entities(entities)
+def run_query(config: AppConfig, question: str) -> int:
+    retriever = Retriever(config)
+    results = retriever.search(question)
     answer = answer_question(question, results, config.ollama)
     print("\n" + answer)
     print("\nSources:")
@@ -282,11 +236,9 @@ def run_eval(
     config: AppConfig,
     dataset: Path,
     *,
-    use_dense: bool = False,
-    use_vectors: bool = False,
     output: Path | None = None,
 ) -> int:
-    report = run_evaluation(config, dataset, use_dense=use_dense or use_vectors)
+    report = run_evaluation(config, dataset)
     summary = report["summary"]
     print(f"Examples: {summary['examples']}")
     print(f"Judged: {summary['judged_examples']}")
@@ -363,40 +315,8 @@ def format_duration(seconds: float) -> str:
     return f"{secs}s"
 
 
-def ensure_query_artifacts(config: AppConfig) -> None:
-    artifact_dir = artifact_read_path(config)
-    if not load_chunks(artifact_dir / CHUNKS_FILE):
-        raise RuntimeError("No chunks found. Run `osu-bot ingest` first.")
-
-
 def artifact_read_path(config: AppConfig) -> Path:
     return config.artifacts.source_path or config.artifacts.path
-
-
-def print_entities(entities) -> None:
-    if not entities:
-        print("Entities: none detected")
-        return
-    print("Entities: " + ", ".join(entity.canonical for entity in entities[:12]))
-
-
-def print_document_candidates(candidates) -> None:
-    if not candidates:
-        print("Documents: none routed")
-        return
-    print("Documents:")
-    for candidate in candidates[:12]:
-        aliases = ", ".join(sorted(set(candidate.matched_aliases))[:4]) if candidate.matched_aliases else "none"
-        reasons = ", ".join(candidate.reasons[:4]) if candidate.reasons else "none"
-        print(
-            f"  {candidate.document_id} "
-            f"topic={candidate.topic_id or candidate.document_id} "
-            f"score={candidate.score:.3f} "
-            f"lane={candidate.retrieval_lane} "
-            f"trust={candidate.trust_tier} "
-            f"reasons={reasons} "
-            f"aliases={aliases}"
-        )
 
 
 def _preview(text: str, limit: int = 500) -> str:
