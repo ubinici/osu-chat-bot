@@ -21,18 +21,18 @@ Release gate:
 
 ## 2. Complete response path
 
-- Put generation behind a small provider interface.
-- Keep Ollama as the first provider and allow a configurable HTTP provider later.
-- Require cited, context-grounded answers and a clear insufficient-context response.
-- Add a minimal HTTP health endpoint and chat endpoint.
-- Preserve the CLI for inspection and evaluation.
+- [x] Put generation behind a small provider interface.
+- [x] Keep Ollama as the default and support an OpenAI-compatible HTTP provider.
+- [x] Require cited, context-grounded answers and a clear insufficient-context response.
+- [x] Add liveness, readiness, and chat HTTP endpoints.
+- [x] Preserve the CLI for inspection and evaluation.
 
 ## 3. DigitalOcean build and deployment
 
 - Use an eligible CPU Droplet; do not rely on GPU or excluded third-party inference credits.
 - Run ingestion and indexing on the Droplet with persistent model and Qdrant caches.
 - Start with a small quantized instruction model and measure response latency before trying a larger one.
-- Package configuration through environment variables and persistent volumes.
+- [x] Package the CPU-only stack with environment variables and persistent volumes.
 - Record RAM, latency, retrieval score, and model settings for each serious run.
 
 ## 4. Real-world iteration

@@ -26,6 +26,10 @@ top_k = 3
     monkeypatch.setenv("OSU_BOT_QDRANT_URL", "http://qdrant:6333")
     monkeypatch.setenv("OSU_BOT_QDRANT_COLLECTION", "osu_wiki_en_test")
     monkeypatch.setenv("OSU_BOT_QDRANT_VECTOR_SIZE", "768")
+    monkeypatch.setenv("OSU_BOT_GENERATION_PROVIDER", "openai-compatible")
+    monkeypatch.setenv("OSU_BOT_GENERATION_URL", "https://models.example/v1/")
+    monkeypatch.setenv("OSU_BOT_GENERATION_MODEL", "small-instruct")
+    monkeypatch.setenv("OSU_BOT_GENERATION_API_KEY", "test-key")
 
     config = load_config(config_path)
 
@@ -35,3 +39,7 @@ top_k = 3
     assert config.qdrant.collection == "osu_wiki_en_test"
     assert config.qdrant.vector_size == 768
     assert config.retrieval.top_k == 3
+    assert config.generation.provider == "openai-compatible"
+    assert config.generation.url == "https://models.example/v1"
+    assert config.generation.model == "small-instruct"
+    assert config.generation.api_key == "test-key"

@@ -47,3 +47,16 @@ def test_cli_dispatches_dense_evaluation(monkeypatch, tmp_path) -> None:
 
     assert cli.main(["eval", str(dataset)]) == 0
     assert calls == [({"config": "config.toml"}, dataset, {"output": None})]
+
+
+def test_cli_dispatches_server_with_one_worker_configuration(monkeypatch) -> None:
+    calls = []
+    monkeypatch.setattr(cli, "load_config", lambda path: {"config": path})
+    monkeypatch.setattr(
+        cli.commands,
+        "run_server",
+        lambda config, **kwargs: calls.append((config, kwargs)) or 0,
+    )
+
+    assert cli.main(["serve", "--host", "0.0.0.0", "--port", "9000"]) == 0
+    assert calls == [({"config": "config.toml"}, {"host": "0.0.0.0", "port": 9000})]

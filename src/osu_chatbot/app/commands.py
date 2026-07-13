@@ -23,7 +23,6 @@ from ..domain.artifacts import (
     write_jsonl,
 )
 from ..evaluation.runner import run_evaluation
-from ..generation.answerer import answer_question
 from ..indexing.pipeline import IndexOptions, build_index
 from ..knowledge.links import build_link_artifacts
 from ..knowledge.ner import build_entity_candidates_from_artifacts
@@ -204,11 +203,12 @@ def run_index(config: AppConfig, *, batch_size: int, offset: int, limit: int | N
 
 def run_inspect(config: AppConfig, question: str) -> int:
     retriever = Retriever(config)
-    results = retriever.search(question)
-    labels = ", ".join(sorted(retriever.last_intent.labels)) or "general"
+    outcome = retriever.retrieve(question)
+    results = outcome.results
+    labels = ", ".join(sorted(outcome.intent.labels)) or "general"
     print(f"Intent: {labels}")
-    if retriever.last_search_query != question:
-        print(f"Search query: {retriever.last_search_query}")
+    if outcome.search_query != question:
+        print(f"Search query: {outcome.search_query}")
     for rank, result in enumerate(results, start=1):
         chunk = result.chunk
         heading = " > ".join(chunk.heading_path) if chunk.heading_path else chunk.title
@@ -222,13 +222,22 @@ def run_inspect(config: AppConfig, question: str) -> int:
 
 
 def run_query(config: AppConfig, question: str) -> int:
-    retriever = Retriever(config)
-    results = retriever.search(question)
-    answer = answer_question(question, results, config.ollama)
-    print("\n" + answer)
+    from .service import ChatService
+
+    result = ChatService(config).ask(question)
+    print("\n" + result.answer)
     print("\nSources:")
-    for index, result in enumerate(results, start=1):
-        print(f"[{index}] {result.chunk.title} - {result.chunk.osu_url}")
+    for source in result.sources:
+        print(f"[{source.citation}] {source.title} - {source.url}")
+    return 0
+
+
+def run_server(config: AppConfig, *, host: str, port: int) -> int:
+    import uvicorn
+
+    from .api import create_app
+
+    uvicorn.run(create_app(config), host=host, port=port, workers=1)
     return 0
 
 

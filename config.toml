@@ -21,7 +21,9 @@ vector_size = 384
 [retrieval]
 top_k = 6
 
-[ollama]
+[generation]
+provider = "ollama"
 url = "http://127.0.0.1:11434"
 model = "mistral"
 temperature = 0.1
+timeout_seconds = 120

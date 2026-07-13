@@ -25,13 +25,21 @@ osu-bot index
 osu-bot inspect "What does AR change?"
 ```
 
-Generation currently uses Ollama:
+Generation defaults to Ollama:
 
 ```powershell
 ollama pull mistral
 ollama serve
 osu-bot query "What is osu!direct?"
 ```
+
+Run the HTTP API:
+
+```powershell
+osu-bot serve
+```
+
+It exposes `GET /healthz`, `GET /readyz`, and `POST /v1/chat`.
 
 ## Commands
 
@@ -40,7 +48,8 @@ osu-bot query "What is osu!direct?"
 - `index`: embed chunks and upsert their vectors and complete payloads into Qdrant.
 - `inspect`: show query analysis and retrieved chunks without generation.
 - `eval`: measure document/chunk retrieval against a JSONL evaluation set.
-- `query`: retrieve evidence and ask Ollama for a cited answer.
+- `query`: retrieve evidence and ask the configured generator for a cited answer.
+- `serve`: run the minimal HTTP chat API with one inference worker.
 
 Additional `terms`, `links`, `entities`, `normalize-entities`, and `stats` commands are offline corpus-analysis utilities. They are not required by the serving path.
 
@@ -59,6 +68,11 @@ vector_size = 384
 
 [retrieval]
 top_k = 6
+
+[generation]
+provider = "ollama"
+url = "http://127.0.0.1:11434"
+model = "mistral"
 ```
 
 The Qdrant URL can point to embedded storage or a remote service. Environment variables can override deployment-sensitive paths:
@@ -68,6 +82,14 @@ The Qdrant URL can point to embedded storage or a remote service. Environment va
 - `OSU_BOT_QDRANT_URL`
 - `OSU_BOT_QDRANT_COLLECTION`
 - `OSU_BOT_QDRANT_VECTOR_SIZE`
+- `OSU_BOT_GENERATION_PROVIDER`
+- `OSU_BOT_GENERATION_URL`
+- `OSU_BOT_GENERATION_MODEL`
+- `OSU_BOT_GENERATION_API_KEY`
+- `OSU_BOT_GENERATION_TEMPERATURE`
+- `OSU_BOT_GENERATION_TIMEOUT_SECONDS`
+
+Supported generation providers are `ollama` and `openai-compatible`. For the latter, configure the base URL through `/v1`; the adapter calls its `/chat/completions` endpoint.
 
 ## Chunking and indexing
 
@@ -98,9 +120,11 @@ Expectations use actual corpus document IDs so the metric describes retrieval be
 - `osu_chatbot.corpus`: source parsing and chunk construction.
 - `osu_chatbot.indexing`: embeddings and Qdrant indexing.
 - `osu_chatbot.retrieval`: intent hints and the replaceable dense backend.
-- `osu_chatbot.generation`: grounded prompt and Ollama generation.
+- `osu_chatbot.generation`: grounded prompt and replaceable generation providers.
 - `osu_chatbot.evaluation`: retrieval datasets and metrics.
 - `osu_chatbot.quality`: artifact validation and statistics.
 - `osu_chatbot.app`: CLI entry point.
 
 The guided Colab workflow is in `notebooks/osu_chatbot_colab_walkthrough.ipynb`.
+
+The CPU-only DigitalOcean deployment workflow is in `deploy/README.md`.

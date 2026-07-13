@@ -19,7 +19,8 @@ def run_evaluation(
     retriever = retriever or Retriever(config)
     rows = []
     for example in examples:
-        results = retriever.search(example.question)
+        outcome = retriever.retrieve(example.question)
+        results = outcome.results
         score = score_retrieval(example, results)
         rows.append(
             {
@@ -27,8 +28,8 @@ def run_evaluation(
                 "category": example.category,
                 "expected_chunk_ids": example.expected_chunk_ids,
                 "expected_document_ids": example.expected_document_ids,
-                "intent": sorted(retriever.last_intent.labels),
-                "search_query": retriever.last_search_query,
+                "intent": sorted(outcome.intent.labels),
+                "search_query": outcome.search_query,
                 "top_chunk_ids": [result.chunk.id for result in results],
                 "top_document_ids": [result.chunk.document_id for result in results],
                 "top_sources": [

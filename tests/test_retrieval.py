@@ -91,11 +91,13 @@ def test_retriever_expands_osu_aliases_and_delegates_to_backend() -> None:
     config = AppConfig(retrieval=RetrievalConfig(top_k=4))
     retriever = Retriever(config, backend=backend)
 
-    results = retriever.search("what does AR change?")
+    outcome = retriever.retrieve("what does AR change?")
+    results = outcome.results
 
     assert results[0].chunk.document_id == "Beatmap"
     assert backend.calls == [("what does AR change?\nRelated osu! terms: approach, rate", 4)]
-    assert retriever.last_intent.labels == set()
+    assert outcome.intent.labels == set()
+    assert outcome.search_query.endswith("Related osu! terms: approach, rate")
 
 
 def test_retriever_does_not_call_backend_for_blank_query() -> None:
@@ -104,3 +106,14 @@ def test_retriever_does_not_call_backend_for_blank_query() -> None:
             raise AssertionError("backend should not be called")
 
     assert Retriever(AppConfig(), backend=FailBackend()).search("   ") == []
+
+
+def test_retriever_delegates_readiness_to_backend() -> None:
+    class ReadyBackend:
+        def search(self, query: str, limit: int):
+            return []
+
+        def is_ready(self):
+            return False
+
+    assert not Retriever(AppConfig(), backend=ReadyBackend()).is_ready()

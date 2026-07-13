@@ -52,6 +52,9 @@ class DenseRetriever:
             results.append(SearchResult(chunk=chunk, score=float(hit.score)))
         return results
 
+    def is_ready(self) -> bool:
+        return bool(self._client.collection_exists(self.config.qdrant.collection))
+
 
 def chunk_from_payload(payload: dict[str, Any]) -> Chunk:
     chunk_id = str(payload.get("chunk_id") or "").strip()

@@ -40,10 +40,13 @@ class RetrievalConfig:
 
 
 @dataclass(frozen=True)
-class OllamaConfig:
+class GenerationConfig:
+    provider: str = "ollama"
     url: str = "http://127.0.0.1:11434"
     model: str = "mistral"
+    api_key: str | None = None
     temperature: float = 0.1
+    timeout_seconds: float = 120.0
 
 
 @dataclass(frozen=True)
@@ -53,7 +56,7 @@ class AppConfig:
     embedding: EmbeddingConfig = EmbeddingConfig()
     qdrant: QdrantConfig = QdrantConfig()
     retrieval: RetrievalConfig = RetrievalConfig()
-    ollama: OllamaConfig = OllamaConfig()
+    generation: GenerationConfig = GenerationConfig()
 
 
 def load_config(path: str | Path = "config.toml") -> AppConfig:
@@ -63,6 +66,9 @@ def load_config(path: str | Path = "config.toml") -> AppConfig:
     artifact_data = data.get("artifacts", {})
     source_path = os.environ.get("OSU_BOT_ARTIFACT_SOURCE_PATH") or artifact_data.get("source_path")
     qdrant_data = data.get("qdrant", {})
+    generation_data = data.get("generation", {})
+    if not generation_data and data.get("ollama"):
+        generation_data = {"provider": "ollama", **data["ollama"]}
     return AppConfig(
         corpus=CorpusConfig(
             osu_wiki_path=Path(data.get("corpus", {}).get("osu_wiki_path", "database/osu-wiki")),
@@ -87,9 +93,24 @@ def load_config(path: str | Path = "config.toml") -> AppConfig:
         retrieval=RetrievalConfig(
             top_k=int(data.get("retrieval", {}).get("top_k", 6)),
         ),
-        ollama=OllamaConfig(
-            url=data.get("ollama", {}).get("url", "http://127.0.0.1:11434").rstrip("/"),
-            model=data.get("ollama", {}).get("model", "mistral"),
-            temperature=float(data.get("ollama", {}).get("temperature", 0.1)),
+        generation=GenerationConfig(
+            provider=(
+                os.environ.get("OSU_BOT_GENERATION_PROVIDER")
+                or generation_data.get("provider", "ollama")
+            ).strip().casefold(),
+            url=(
+                os.environ.get("OSU_BOT_GENERATION_URL")
+                or generation_data.get("url", "http://127.0.0.1:11434")
+            ).rstrip("/"),
+            model=os.environ.get("OSU_BOT_GENERATION_MODEL") or generation_data.get("model", "mistral"),
+            api_key=os.environ.get("OSU_BOT_GENERATION_API_KEY") or generation_data.get("api_key"),
+            temperature=float(
+                os.environ.get("OSU_BOT_GENERATION_TEMPERATURE")
+                or generation_data.get("temperature", 0.1)
+            ),
+            timeout_seconds=float(
+                os.environ.get("OSU_BOT_GENERATION_TIMEOUT_SECONDS")
+                or generation_data.get("timeout_seconds", 120.0)
+            ),
         ),
     )

@@ -1,0 +1,51 @@
+services:
+  app:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    image: osu-chatbot:local
+    restart: unless-stopped
+    environment:
+      HF_HOME: /home/app/.cache/huggingface
+      OSU_BOT_QDRANT_URL: http://qdrant:6333
+      OSU_BOT_QDRANT_COLLECTION: osu_wiki_en_dense_v2
+      OSU_BOT_GENERATION_PROVIDER: ${OSU_BOT_GENERATION_PROVIDER:-ollama}
+      OSU_BOT_GENERATION_URL: ${OSU_BOT_GENERATION_URL:-http://ollama:11434}
+      OSU_BOT_GENERATION_MODEL: ${OSU_BOT_GENERATION_MODEL:-qwen3:4b}
+      OSU_BOT_GENERATION_API_KEY: ${OSU_BOT_GENERATION_API_KEY:-}
+    ports:
+      - "127.0.0.1:${OSU_BOT_PORT:-8000}:8000"
+    volumes:
+      - ../artifacts:/app/artifacts
+      - ../database/osu-wiki:/app/database/osu-wiki:ro
+      - huggingface_cache:/home/app/.cache/huggingface
+    depends_on:
+      - qdrant
+      - ollama
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz')"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+
+  qdrant:
+    image: qdrant/qdrant:${QDRANT_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    volumes:
+      - qdrant_data:/qdrant/storage
+
+  ollama:
+    image: ollama/ollama:${OLLAMA_IMAGE_TAG:-latest}
+    restart: unless-stopped
+    volumes:
+      - ollama_data:/root/.ollama
+
+volumes:
+  huggingface_cache:
+  ollama_data:
+  qdrant_data:

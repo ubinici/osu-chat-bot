@@ -11,7 +11,7 @@ from . import commands
 
 
 def main(argv: list[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(prog="osu-bot", description="Local osu! chatbot algorithm prototype")
+    parser = argparse.ArgumentParser(prog="osu-bot", description="Small cited osu! RAG chatbot")
     parser.add_argument("--config", default="config.toml", help="Path to TOML config file")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
@@ -56,8 +56,12 @@ def main(argv: list[str] | None = None) -> int:
     inspect_parser = subparsers.add_parser("inspect", help="Inspect retrieval results without calling the LLM")
     inspect_parser.add_argument("question")
 
-    query_parser = subparsers.add_parser("query", help="Ask a cited RAG question via Ollama")
+    query_parser = subparsers.add_parser("query", help="Ask a cited RAG question")
     query_parser.add_argument("question")
+
+    serve_parser = subparsers.add_parser("serve", help="Run the HTTP chat API")
+    serve_parser.add_argument("--host", default="127.0.0.1")
+    serve_parser.add_argument("--port", type=int, default=8000)
 
     eval_parser = subparsers.add_parser("eval", help="Run retrieval evaluation from a JSONL dataset")
     eval_parser.add_argument("dataset", type=Path)
@@ -105,6 +109,8 @@ def main(argv: list[str] | None = None) -> int:
             return commands.run_inspect(config, args.question)
         if args.command == "query":
             return commands.run_query(config, args.question)
+        if args.command == "serve":
+            return commands.run_server(config, host=args.host, port=args.port)
         if args.command == "eval":
             return commands.run_eval(config, args.dataset, output=args.output)
     except Exception as exc:

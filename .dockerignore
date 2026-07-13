@@ -1,0 +1,11 @@
+.git
+.venv
+.pytest_cache
+.pytest_tmp
+artifacts
+database
+notebooks
+__pycache__
+*.py[cod]
+*.egg-info
+deploy/.env
