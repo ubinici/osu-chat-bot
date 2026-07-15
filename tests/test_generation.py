@@ -116,3 +116,26 @@ def test_ollama_generator_disables_thinking_for_cpu_latency(monkeypatch) -> None
     assert answer == "Grounded answer. [1]"
     assert captured["url"] == "http://127.0.0.1:11434/api/generate"
     assert captured["payload"]["think"] is False
+    assert captured["headers"] == {}
+
+
+def test_ollama_generator_authenticates_cloud_requests(monkeypatch) -> None:
+    captured = {}
+
+    def fake_post_json(url, payload, **kwargs):
+        captured.update(url=url, payload=payload, **kwargs)
+        return {"response": "Cloud answer. [1]"}
+
+    monkeypatch.setattr("osu_chatbot.generation.ollama.post_json", fake_post_json)
+    config = GenerationConfig(
+        provider="ollama",
+        url="https://ollama.com",
+        model="cloud-model",
+        api_key="cloud-secret",
+    )
+
+    answer = OllamaGenerator(config).generate("prompt")
+
+    assert answer == "Cloud answer. [1]"
+    assert captured["url"] == "https://ollama.com/api/generate"
+    assert captured["headers"] == {"Authorization": "Bearer cloud-secret"}

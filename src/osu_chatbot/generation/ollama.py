@@ -10,6 +10,9 @@ class OllamaGenerator:
         self.config = config
 
     def generate(self, prompt: str) -> str:
+        headers = {}
+        if self.config.api_key:
+            headers["Authorization"] = f"Bearer {self.config.api_key}"
         data = post_json(
             f"{self.config.url}/api/generate",
             {
@@ -19,6 +22,7 @@ class OllamaGenerator:
                 "think": False,
                 "options": {"temperature": self.config.temperature},
             },
+            headers=headers,
             timeout_seconds=self.config.timeout_seconds,
             service_name=f"Ollama at {self.config.url}",
         )
