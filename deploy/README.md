@@ -58,6 +58,19 @@ ssh -L 8000:127.0.0.1:8000 your-user@your-droplet
 
 Then call `http://127.0.0.1:8000` locally. Add an authenticated TLS reverse proxy before exposing the API publicly.
 
+## Hugging Face authentication
+
+The public embedding model can be downloaded anonymously, but authenticated Hub
+requests have higher rate limits. Create a dedicated fine-grained read token and
+store it only in the ignored `deploy/.env` file:
+
+```dotenv
+HF_TOKEN=hf_your_token
+```
+
+Recreate the app container after adding or rotating the token. Compose also passes
+it to one-off `app` commands used for indexing. Never commit the token.
+
 ## Provider switch
 
 To call Ollama Cloud directly, change `deploy/.env`:

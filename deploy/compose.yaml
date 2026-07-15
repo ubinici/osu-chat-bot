@@ -7,6 +7,7 @@ services:
     restart: unless-stopped
     environment:
       HF_HOME: /home/app/.cache/huggingface
+      HF_TOKEN: ${HF_TOKEN:-}
       OSU_BOT_QDRANT_URL: http://qdrant:6333
       OSU_BOT_QDRANT_COLLECTION: osu_wiki_en_dense_v2
       OSU_BOT_GENERATION_PROVIDER: ${OSU_BOT_GENERATION_PROVIDER:-ollama}
