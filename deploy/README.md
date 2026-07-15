@@ -60,7 +60,20 @@ Then call `http://127.0.0.1:8000` locally. Add an authenticated TLS reverse prox
 
 ## Provider switch
 
-To use a separate OpenAI-compatible endpoint, change `deploy/.env`:
+To call Ollama Cloud directly, change `deploy/.env`:
+
+```dotenv
+OSU_BOT_GENERATION_PROVIDER=ollama
+OSU_BOT_GENERATION_URL=https://ollama.com
+OSU_BOT_GENERATION_MODEL=gpt-oss:20b
+OSU_BOT_GENERATION_API_KEY=your-secret
+OSU_BOT_GENERATION_THINK=low
+```
+
+The HTTPS scheme is required. GPT-OSS accepts `low`, `medium`, or `high` for
+thinking; other Ollama models can normally use `false`.
+
+To use a separate OpenAI-compatible endpoint instead, change `deploy/.env`:
 
 ```dotenv
 OSU_BOT_GENERATION_PROVIDER=openai-compatible

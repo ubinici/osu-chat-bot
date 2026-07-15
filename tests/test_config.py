@@ -30,6 +30,7 @@ top_k = 3
     monkeypatch.setenv("OSU_BOT_GENERATION_URL", "https://models.example/v1/")
     monkeypatch.setenv("OSU_BOT_GENERATION_MODEL", "small-instruct")
     monkeypatch.setenv("OSU_BOT_GENERATION_API_KEY", "test-key")
+    monkeypatch.setenv("OSU_BOT_GENERATION_THINK", "low")
 
     config = load_config(config_path)
 
@@ -43,3 +44,4 @@ top_k = 3
     assert config.generation.url == "https://models.example/v1"
     assert config.generation.model == "small-instruct"
     assert config.generation.api_key == "test-key"
+    assert config.generation.think == "low"

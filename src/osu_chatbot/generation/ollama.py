@@ -19,7 +19,7 @@ class OllamaGenerator:
                 "model": self.config.model,
                 "prompt": prompt,
                 "stream": False,
-                "think": False,
+                "think": self.config.think,
                 "options": {"temperature": self.config.temperature},
             },
             headers=headers,

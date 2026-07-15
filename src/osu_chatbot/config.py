@@ -45,6 +45,7 @@ class GenerationConfig:
     url: str = "http://127.0.0.1:11434"
     model: str = "mistral"
     api_key: str | None = None
+    think: bool | str = False
     temperature: float = 0.1
     timeout_seconds: float = 120.0
 
@@ -104,6 +105,11 @@ def load_config(path: str | Path = "config.toml") -> AppConfig:
             ).rstrip("/"),
             model=os.environ.get("OSU_BOT_GENERATION_MODEL") or generation_data.get("model", "mistral"),
             api_key=os.environ.get("OSU_BOT_GENERATION_API_KEY") or generation_data.get("api_key"),
+            think=_parse_think(
+                os.environ.get("OSU_BOT_GENERATION_THINK")
+                if "OSU_BOT_GENERATION_THINK" in os.environ
+                else generation_data.get("think", False)
+            ),
             temperature=float(
                 os.environ.get("OSU_BOT_GENERATION_TEMPERATURE")
                 or generation_data.get("temperature", 0.1)
@@ -114,3 +120,16 @@ def load_config(path: str | Path = "config.toml") -> AppConfig:
             ),
         ),
     )
+
+
+def _parse_think(value: object) -> bool | str:
+    if isinstance(value, bool):
+        return value
+    normalized = str(value).strip().casefold()
+    if normalized in {"low", "medium", "high"}:
+        return normalized
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"", "0", "false", "no", "off"}:
+        return False
+    raise ValueError("generation think must be true, false, low, medium, or high")

@@ -132,6 +132,7 @@ def test_ollama_generator_authenticates_cloud_requests(monkeypatch) -> None:
         url="https://ollama.com",
         model="cloud-model",
         api_key="cloud-secret",
+        think="low",
     )
 
     answer = OllamaGenerator(config).generate("prompt")
@@ -139,3 +140,4 @@ def test_ollama_generator_authenticates_cloud_requests(monkeypatch) -> None:
     assert answer == "Cloud answer. [1]"
     assert captured["url"] == "https://ollama.com/api/generate"
     assert captured["headers"] == {"Authorization": "Bearer cloud-secret"}
+    assert captured["payload"]["think"] == "low"
