@@ -29,6 +29,13 @@ class TopicMatch:
 
 
 @dataclass(frozen=True)
+class ClarificationPrompt:
+    reason: str
+    prompt: str
+    options: list[str]
+
+
+@dataclass(frozen=True)
 class ChatResult:
     answer: str
     sources: list[SourceCitation]
@@ -37,6 +44,8 @@ class ChatResult:
     latency_ms: int
     retrieval_lane: str = "canonical"
     resolved_topics: list[TopicMatch] | None = None
+    response_type: str = "answer"
+    clarification: ClarificationPrompt | None = None
 
 
 class ChatService:
@@ -61,7 +70,11 @@ class ChatService:
         started = perf_counter()
         with self._inference_lock:
             outcome = self.retriever.retrieve(clean_question)
-            answer = answer_question(clean_question, outcome.results, self.generator)
+            clarification_request = outcome.analysis.clarification
+            if clarification_request is None:
+                answer = answer_question(clean_question, outcome.results, self.generator)
+            else:
+                answer = clarification_request.prompt
         latency_ms = round((perf_counter() - started) * 1000)
 
         sources = [
@@ -91,6 +104,16 @@ class ChatService:
                 )
                 for topic in outcome.analysis.topics
             ],
+            response_type="clarification" if clarification_request else "answer",
+            clarification=(
+                ClarificationPrompt(
+                    reason=clarification_request.reason,
+                    prompt=clarification_request.prompt,
+                    options=list(clarification_request.options),
+                )
+                if clarification_request
+                else None
+            ),
         )
 
     def is_ready(self) -> bool:

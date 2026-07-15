@@ -7,7 +7,28 @@ from typing import Protocol
 
 from ..domain.artifacts import read_jsonl
 from .intent import TOKEN_RE, classify_query, normalize_token
-from .models import QueryAnalysis, ResolvedTopic
+from .models import ClarificationRequest, QueryAnalysis, ResolvedTopic
+
+VAGUE_QUERIES = {
+    "help",
+    "help me",
+    "it doesnt work",
+    "it does not work",
+    "this doesnt work",
+    "this does not work",
+    "how do i fix it",
+    "what should i do",
+    "where do i go",
+    "can you explain this",
+    "what is this",
+    "what about that",
+}
+CLARIFICATION_OPTIONS = (
+    "gameplay or difficulty",
+    "client, audio, or performance",
+    "beatmapping",
+    "account, rules, or support",
+)
 
 
 class TopicResolver(Protocol):
@@ -31,6 +52,7 @@ class _AliasCandidate:
     confidence: float
     source_type: str | None
     retrieval_lane: str | None
+    preference_strength: str
 
 
 class ArtifactTopicResolver:
@@ -79,6 +101,7 @@ class ArtifactTopicResolver:
                         confidence=candidate.confidence,
                         source_type=candidate.source_type,
                         retrieval_lane=candidate.retrieval_lane,
+                        preference_strength=candidate.preference_strength,
                     )
                 )
                 occupied.update(positions)
@@ -114,6 +137,11 @@ class ArtifactTopicResolver:
                     confidence=confidence,
                     source_type=_optional_string(record.get("target_source")),
                     retrieval_lane=_optional_string(record.get("retrieval_lane")),
+                    preference_strength=_preference_strength(
+                        record,
+                        alias_key=alias_key,
+                        canonical_id=canonical_id,
+                    ),
                 )
             )
         return {key: tuple(value) for key, value in grouped.items()}
@@ -139,6 +167,14 @@ class ArtifactTopicResolver:
         related_documents: list[str] = []
         for candidate in by_canonical[winner.canonical_id]:
             related_documents.extend(candidate.document_ids)
+        preference_strength = (
+            "strong"
+            if any(
+                candidate.preference_strength == "strong"
+                for candidate in by_canonical[winner.canonical_id]
+            )
+            else "soft"
+        )
         return _AliasCandidate(
             canonical_id=winner.canonical_id,
             alias=winner.alias,
@@ -146,6 +182,7 @@ class ArtifactTopicResolver:
             confidence=winner.confidence,
             source_type=winner.source_type,
             retrieval_lane=winner.retrieval_lane,
+            preference_strength=preference_strength,
         )
 
 
@@ -155,16 +192,34 @@ class DefaultQueryAnalyzer:
 
     def analyze(self, query: str) -> QueryAnalysis:
         intent = classify_query(query)
+        topics = self.resolver.resolve(query)
         return QueryAnalysis(
             query=query,
             intent=intent,
-            topics=self.resolver.resolve(query),
+            topics=topics,
             retrieval_lane="temporal" if "temporal" in intent.labels else "canonical",
+            clarification=_clarification_request(query, topics),
         )
 
 
 def normalize_phrase(value: str) -> str:
     return " ".join(normalize_token(token) for token in TOKEN_RE.findall(value))
+
+
+def _clarification_request(
+    query: str,
+    topics: tuple[ResolvedTopic, ...],
+) -> ClarificationRequest | None:
+    if topics or normalize_phrase(query) not in VAGUE_QUERIES:
+        return None
+    return ClarificationRequest(
+        reason="missing_topic",
+        prompt=(
+            "What part of osu! do you need help with? For example: gameplay, "
+            "the client, beatmapping, or your account."
+        ),
+        options=CLARIFICATION_OPTIONS,
+    )
 
 
 def _unique_strings(values: list[object]) -> tuple[str, ...]:
@@ -179,3 +234,23 @@ def _unique_strings(values: list[object]) -> tuple[str, ...]:
 def _optional_string(value: object) -> str | None:
     text = str(value or "").strip()
     return text or None
+
+
+def _preference_strength(
+    record: dict[str, object],
+    *,
+    alias_key: str,
+    canonical_id: str,
+) -> str:
+    explicit = str(record.get("preference_strength") or "").strip().casefold()
+    if explicit in {"strong", "soft"}:
+        return explicit
+    source = str(record.get("source") or "").strip().casefold()
+    if source in {"title", "path_tail", "page_id", "topic_identifier"}:
+        return "strong"
+    alias_tokens = set(normalize_phrase(alias_key).split())
+    identifier = canonical_id.rstrip("/").rsplit("/", 1)[-1].replace("_", " ")
+    identifier_tokens = set(normalize_phrase(identifier).split())
+    if alias_tokens and alias_tokens.issubset(identifier_tokens):
+        return "strong"
+    return "soft"

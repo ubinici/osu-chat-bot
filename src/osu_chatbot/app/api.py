@@ -31,6 +31,12 @@ class TopicResponse(BaseModel):
     confidence: float
 
 
+class ClarificationResponse(BaseModel):
+    reason: str
+    prompt: str
+    options: list[str]
+
+
 class ChatResponse(BaseModel):
     answer: str
     sources: list[SourceResponse]
@@ -39,6 +45,8 @@ class ChatResponse(BaseModel):
     latency_ms: int
     retrieval_lane: str
     resolved_topics: list[TopicResponse]
+    response_type: str
+    clarification: ClarificationResponse | None
 
 
 def create_app(
@@ -81,6 +89,12 @@ def create_app(
             latency_ms=result.latency_ms,
             retrieval_lane=result.retrieval_lane,
             resolved_topics=[TopicResponse(**vars(topic)) for topic in result.resolved_topics or []],
+            response_type=result.response_type,
+            clarification=(
+                ClarificationResponse(**vars(result.clarification))
+                if result.clarification
+                else None
+            ),
         )
 
     return app

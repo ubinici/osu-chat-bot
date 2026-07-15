@@ -69,6 +69,29 @@ def main(argv: list[str] | None = None) -> int:
     eval_parser.add_argument("--output", type=Path, help="Optional JSON report path")
     eval_parser.add_argument("--top-k", type=int, help="Override retrieval depth for this evaluation")
 
+    topic_dataset_parser = subparsers.add_parser(
+        "build-topic-dataset",
+        help="Promote reviewed feedback into a query-to-topic JSONL dataset",
+    )
+    topic_dataset_parser.add_argument("feedback", type=Path, help="Raw feedback events JSONL")
+    topic_dataset_parser.add_argument("reviews", type=Path, help="Offline feedback reviews JSONL")
+    topic_dataset_parser.add_argument("--output", type=Path, required=True, help="Output query-topic JSONL")
+    topic_dataset_parser.add_argument(
+        "--held-out",
+        type=Path,
+        help="Evaluation JSONL whose exact normalized queries must not be promoted",
+    )
+
+    topic_model_parser = subparsers.add_parser(
+        "eval-topic-model",
+        help="Compare semantic query-topic kNN with the deterministic alias resolver",
+    )
+    topic_model_parser.add_argument("dataset", type=Path, help="Query-topic JSONL dataset")
+    topic_model_parser.add_argument("--alias-artifact", type=Path, help="Alias JSONL override")
+    topic_model_parser.add_argument("--split", default="validation", choices=["validation", "test"])
+    topic_model_parser.add_argument("--top-k", type=int, default=3)
+    topic_model_parser.add_argument("--output", type=Path, help="Optional JSON report path")
+
     args = parser.parse_args(argv)
     config = load_config(args.config)
 
@@ -117,6 +140,22 @@ def main(argv: list[str] | None = None) -> int:
             return commands.run_server(config, host=args.host, port=args.port)
         if args.command == "eval":
             return commands.run_eval(config, args.dataset, output=args.output, top_k=args.top_k)
+        if args.command == "build-topic-dataset":
+            return commands.run_build_topic_dataset(
+                args.feedback,
+                args.reviews,
+                output=args.output,
+                held_out=args.held_out,
+            )
+        if args.command == "eval-topic-model":
+            return commands.run_eval_topic_model(
+                config,
+                args.dataset,
+                alias_artifact=args.alias_artifact,
+                split=args.split,
+                top_k=args.top_k,
+                output=args.output,
+            )
     except Exception as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1

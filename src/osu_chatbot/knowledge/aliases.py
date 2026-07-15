@@ -103,6 +103,11 @@ def _add_alias(
         "topic_document_ids": topic_document_ids,
         "source": source,
         "confidence": round(confidence, 6),
+        "preference_strength": _preference_strength(
+            alias_key,
+            canonical_id=canonical_id,
+            source=source,
+        ),
         "target_source": target_source,
         "retrieval_lane": retrieval_lane,
     }
@@ -148,3 +153,12 @@ def _path_tail(document_id: str) -> str:
 
 def _string_list(value: object) -> list[str]:
     return [str(item).strip() for item in value if str(item).strip()] if isinstance(value, list) else []
+
+
+def _preference_strength(alias_key: str, *, canonical_id: str, source: str) -> str:
+    if source in {"title", "path_tail"}:
+        return "strong"
+    alias_tokens = set(term_key(alias_key).split())
+    identifier = canonical_id.rstrip("/").rsplit("/", 1)[-1]
+    identifier_tokens = set(term_key(identifier).split())
+    return "strong" if alias_tokens and alias_tokens.issubset(identifier_tokens) else "soft"

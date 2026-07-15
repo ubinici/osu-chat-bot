@@ -29,6 +29,7 @@ def run_evaluation(
                 "category": example.category,
                 "expected_chunk_ids": example.expected_chunk_ids,
                 "expected_document_ids": example.expected_document_ids,
+                "acceptable_document_ids": example.acceptable_document_ids,
                 "intent": sorted(outcome.intent.labels),
                 "retrieval_lane": outcome.analysis.retrieval_lane,
                 "resolved_topics": [
@@ -37,6 +38,7 @@ def run_evaluation(
                         "matched_alias": topic.matched_alias,
                         "document_ids": list(topic.document_ids),
                         "confidence": round(topic.confidence, 6),
+                        "preference_strength": topic.preference_strength,
                     }
                     for topic in outcome.analysis.topics
                 ],

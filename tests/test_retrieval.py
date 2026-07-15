@@ -23,6 +23,20 @@ def chunk(chunk_id: str = "beatmap::article") -> Chunk:
     )
 
 
+def document_chunk(chunk_id: str, document_id: str) -> Chunk:
+    return Chunk(
+        id=chunk_id,
+        document_id=document_id,
+        source_type="wiki",
+        file_path=f"{document_id}/en.md",
+        osu_url=f"https://osu.ppy.sh/wiki/en/{document_id}",
+        title=document_id.rsplit("/", 1)[-1].replace("_", " "),
+        text=f"Evidence from {document_id}.",
+        chunk_index=0,
+        metadata={"chunk_type": "article"},
+    )
+
+
 def test_dense_retriever_returns_self_contained_qdrant_payloads() -> None:
     class FakeEmbedder:
         def encode(self, texts):
@@ -165,6 +179,66 @@ def test_retriever_prefers_resolved_documents_then_fills_from_source_lane() -> N
     assert backend.calls[1].source_types == ("wiki",)
 
 
+def test_retriever_limits_soft_topic_focus_before_general_retrieval() -> None:
+    client = SearchResult(
+        chunk=document_chunk("client::article", "Client"),
+        score=0.7,
+    )
+    playfield = SearchResult(
+        chunk=document_chunk("playfield::article", "Client/Playfield"),
+        score=0.9,
+    )
+    interface = SearchResult(
+        chunk=document_chunk("interface::article", "Client/Interface"),
+        score=0.8,
+    )
+
+    class StaticAnalyzer:
+        def analyze(self, query: str):
+            return QueryAnalysis(
+                query=query,
+                topics=(
+                    ResolvedTopic(
+                        canonical_id="Client",
+                        matched_alias="game client",
+                        document_ids=("Client",),
+                        confidence=0.96,
+                        preference_strength="soft",
+                    ),
+                ),
+            )
+
+    class FakeBackend:
+        def __init__(self):
+            self.calls = []
+
+        def search(self, request: RetrievalRequest):
+            self.calls.append(request)
+            return [client] if request.document_ids else [playfield, interface]
+
+    backend = FakeBackend()
+    config = AppConfig(
+        retrieval=RetrievalConfig(
+            top_k=3,
+            preferred_document_limit=3,
+            soft_preferred_document_limit=1,
+        )
+    )
+    outcome = Retriever(config, backend=backend, analyzer=StaticAnalyzer()).retrieve(
+        "Explain the buttons in the game client"
+    )
+
+    assert [result.chunk.document_id for result in outcome.results] == [
+        "Client",
+        "Client/Playfield",
+        "Client/Interface",
+    ]
+    assert backend.calls[0].document_ids == ("Client",)
+    assert backend.calls[0].limit == 1
+    assert backend.calls[1].source_types == ("wiki",)
+    assert backend.calls[1].limit == 3
+
+
 def test_artifact_topic_resolver_rejects_ambiguous_aliases(tmp_path) -> None:
     artifact = tmp_path / "aliases.jsonl"
     artifact.write_text(
@@ -181,12 +255,53 @@ def test_artifact_topic_resolver_rejects_ambiguous_aliases(tmp_path) -> None:
     assert resolver.resolve("What is player rank?") == ()
 
 
+def test_artifact_topic_resolver_softens_broad_aliases_but_keeps_specific_aliases_strong(
+    tmp_path,
+) -> None:
+    artifact = tmp_path / "aliases.jsonl"
+    artifact.write_text(
+        '{"alias":"game client","document_id":"Client",'
+        '"canonical_document_id":"Client","source":"accepted_link","confidence":0.96}\n'
+        '{"alias":"HP drain","document_id":"Beatmap/HP_drain_rate",'
+        '"source":"accepted_link","confidence":0.89}\n',
+        encoding="utf-8",
+    )
+
+    resolver = ArtifactTopicResolver(artifact)
+
+    assert resolver.resolve("buttons in the game client")[0].preference_strength == "soft"
+    assert resolver.resolve("what is HP drain?")[0].preference_strength == "strong"
+
+
 def test_retriever_does_not_call_backend_for_blank_query() -> None:
     class FailBackend:
         def search(self, request: RetrievalRequest):
             raise AssertionError("backend should not be called")
 
     assert Retriever(AppConfig(), backend=FailBackend(), analyzer=DefaultQueryAnalyzer()).search("   ") == []
+
+
+def test_retriever_returns_clarification_without_searching_for_vague_query() -> None:
+    class FailBackend:
+        def search(self, request: RetrievalRequest):
+            raise AssertionError("backend should not be called for a clarification")
+
+    outcome = Retriever(
+        AppConfig(),
+        backend=FailBackend(),
+        analyzer=DefaultQueryAnalyzer(),
+    ).retrieve("it does not work")
+
+    assert outcome.results == []
+    assert outcome.search_query == "it does not work"
+    assert outcome.analysis.requires_clarification
+    assert outcome.analysis.clarification.reason == "missing_topic"
+
+
+def test_clarification_policy_does_not_block_short_but_specific_queries() -> None:
+    analysis = DefaultQueryAnalyzer().analyze("who created the game?")
+
+    assert not analysis.requires_clarification
 
 
 def test_retriever_delegates_readiness_to_backend() -> None:

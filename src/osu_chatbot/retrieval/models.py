@@ -15,6 +15,16 @@ class ResolvedTopic:
     confidence: float
     source_type: str | None = None
     retrieval_lane: str | None = None
+    preference_strength: str = "strong"
+
+
+@dataclass(frozen=True)
+class ClarificationRequest:
+    """A conservative request for missing user context."""
+
+    reason: str
+    prompt: str
+    options: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -25,11 +35,29 @@ class QueryAnalysis:
     intent: QueryIntent = field(default_factory=QueryIntent)
     topics: tuple[ResolvedTopic, ...] = ()
     retrieval_lane: str = "canonical"
+    clarification: ClarificationRequest | None = None
+
+    @property
+    def requires_clarification(self) -> bool:
+        return self.clarification is not None
 
     @property
     def preferred_document_ids(self) -> tuple[str, ...]:
+        return self.strong_preferred_document_ids + self.soft_preferred_document_ids
+
+    @property
+    def strong_preferred_document_ids(self) -> tuple[str, ...]:
+        return self._preferred_document_ids("strong")
+
+    @property
+    def soft_preferred_document_ids(self) -> tuple[str, ...]:
+        return self._preferred_document_ids("soft")
+
+    def _preferred_document_ids(self, strength: str) -> tuple[str, ...]:
         document_ids: list[str] = []
         for topic in self.topics:
+            if topic.preference_strength != strength:
+                continue
             for document_id in topic.document_ids:
                 if document_id and document_id not in document_ids:
                     document_ids.append(document_id)

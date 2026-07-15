@@ -30,6 +30,8 @@ from ..knowledge.aliases import build_document_aliases
 from ..knowledge.ner import build_entity_candidates_from_artifacts
 from ..knowledge.normalization import build_entity_normalization_artifacts
 from ..knowledge.terms import build_terms_from_artifacts
+from ..learning.datasets import promote_feedback_dataset
+from ..learning.topic_model import evaluate_topic_models
 from ..quality.stats import build_stats_report
 from ..quality.validation import build_validation_report
 from ..retrieval.service import Retriever
@@ -272,8 +274,13 @@ def run_eval(
     summary = report["summary"]
     print(f"Examples: {summary['examples']}")
     print(f"Judged: {summary['judged_examples']}")
-    print(f"Matches: {summary['matches']}")
+    print(
+        f"Matches: {summary['matches']} "
+        f"(strict={summary['strict_matches']}, "
+        f"acceptable-only={summary['acceptable_only_matches']})"
+    )
     print(f"Retrieval accuracy: {summary['retrieval_accuracy']:.3f}")
+    print(f"Strict retrieval accuracy: {summary['strict_retrieval_accuracy']:.3f}")
     print(
         "Ranking quality: "
         f"Hit@1={summary['hit_at_1']:.3f}, "
@@ -287,6 +294,76 @@ def run_eval(
             f"{category_summary['matches']}/{category_summary['judged_examples']} "
             f"({category_summary['retrieval_accuracy']:.3f})"
         )
+    if output:
+        write_json(output, report)
+        print(f"Report: {output}")
+    return 0
+
+
+def run_build_topic_dataset(
+    feedback: Path,
+    reviews: Path,
+    *,
+    output: Path,
+    held_out: Path | None = None,
+) -> int:
+    report = promote_feedback_dataset(
+        feedback,
+        reviews,
+        output,
+        held_out_path=held_out,
+    )
+    print(f"Feedback events: {report['feedback_events']}")
+    print(f"Reviews: {report['reviews']}")
+    print(f"Promoted examples: {report['promoted_examples']}")
+    print(f"Rejected reviews: {report['rejected_reviews']}")
+    print(f"Excluded held-out queries: {report['excluded_held_out']}")
+    print(f"Unreviewed events: {report['unreviewed_events']}")
+    print(f"Dataset: {output}")
+    return 0
+
+
+def run_eval_topic_model(
+    config: AppConfig,
+    dataset: Path,
+    *,
+    alias_artifact: Path | None = None,
+    split: str = "validation",
+    top_k: int = 3,
+    output: Path | None = None,
+) -> int:
+    from ..indexing.embeddings import SentenceTransformerEmbeddings
+
+    alias_path = alias_artifact or (
+        artifact_read_path(config) / config.retrieval.alias_artifact
+    )
+    report = evaluate_topic_models(
+        dataset,
+        alias_path,
+        SentenceTransformerEmbeddings(config.embedding),
+        split=split,
+        top_k=max(1, top_k),
+        alias_minimum_confidence=config.retrieval.alias_minimum_confidence,
+        alias_minimum_tokens=config.retrieval.alias_minimum_tokens,
+    )
+    deterministic = report["deterministic"]
+    semantic = report["semantic_knn"]
+    print(f"Training examples: {report['training_examples']}")
+    print(f"{split.title()} examples: {report['evaluation_examples']}")
+    print(
+        "Deterministic: "
+        f"coverage={deterministic['coverage']:.3f}, "
+        f"Hit@1={deterministic['hit_at_1']:.3f}, "
+        f"Hit@3={deterministic['hit_at_3']:.3f}, "
+        f"MRR={deterministic['mean_reciprocal_rank']:.3f}"
+    )
+    print(
+        "Semantic kNN: "
+        f"coverage={semantic['coverage']:.3f}, "
+        f"Hit@1={semantic['hit_at_1']:.3f}, "
+        f"Hit@3={semantic['hit_at_3']:.3f}, "
+        f"MRR={semantic['mean_reciprocal_rank']:.3f}"
+    )
     if output:
         write_json(output, report)
         print(f"Report: {output}")

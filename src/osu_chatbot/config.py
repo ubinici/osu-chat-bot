@@ -41,6 +41,7 @@ class RetrievalConfig:
     alias_minimum_confidence: float = 0.85
     alias_minimum_tokens: int = 2
     preferred_document_limit: int = 4
+    soft_preferred_document_limit: int = 1
     canonical_source_types: tuple[str, ...] = ("wiki",)
     temporal_source_types: tuple[str, ...] = ("wiki", "news")
     excluded_chunk_types: tuple[str, ...] = ("citation", "formula")
@@ -105,6 +106,9 @@ def load_config(path: str | Path = "config.toml") -> AppConfig:
             alias_minimum_confidence=float(retrieval_data.get("alias_minimum_confidence", 0.85)),
             alias_minimum_tokens=max(1, int(retrieval_data.get("alias_minimum_tokens", 2))),
             preferred_document_limit=max(1, int(retrieval_data.get("preferred_document_limit", 4))),
+            soft_preferred_document_limit=max(
+                1, int(retrieval_data.get("soft_preferred_document_limit", 1))
+            ),
             canonical_source_types=_string_tuple(
                 retrieval_data.get("canonical_source_types"),
                 ("wiki",),

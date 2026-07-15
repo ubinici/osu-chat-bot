@@ -11,6 +11,7 @@ class EvaluationExample:
     category: str = "uncategorized"
     expected_chunk_ids: list[str] = field(default_factory=list)
     expected_document_ids: list[str] = field(default_factory=list)
+    acceptable_document_ids: list[str] = field(default_factory=list)
 
 
 def load_evaluation_dataset(path: Path) -> list[EvaluationExample]:
@@ -31,6 +32,9 @@ def load_evaluation_dataset(path: Path) -> list[EvaluationExample]:
                     category=str(record.get("category") or "uncategorized").strip() or "uncategorized",
                     expected_chunk_ids=[str(item) for item in record.get("expected_chunk_ids", [])],
                     expected_document_ids=[str(item) for item in record.get("expected_document_ids", [])],
+                    acceptable_document_ids=[
+                        str(item) for item in record.get("acceptable_document_ids", [])
+                    ],
                 )
             )
     return examples

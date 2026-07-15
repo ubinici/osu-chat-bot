@@ -1,7 +1,7 @@
 from osu_chatbot.app.service import ChatService
 from osu_chatbot.config import AppConfig
 from osu_chatbot.domain.models import Chunk, QueryIntent, SearchResult
-from osu_chatbot.retrieval.models import QueryAnalysis
+from osu_chatbot.retrieval.models import ClarificationRequest, QueryAnalysis
 from osu_chatbot.retrieval.service import RetrievalOutcome
 
 
@@ -54,5 +54,40 @@ def test_chat_service_runs_complete_cited_pipeline() -> None:
     assert response.sources[0].score == 0.912346
     assert response.retrieval_lane == "canonical"
     assert response.resolved_topics == []
+    assert response.response_type == "answer"
+    assert response.clarification is None
     assert response.latency_ms >= 0
     assert service.is_ready()
+
+
+def test_chat_service_returns_clarification_without_generation() -> None:
+    class FakeRetriever:
+        def retrieve(self, question: str):
+            return RetrievalOutcome(
+                results=[],
+                analysis=QueryAnalysis(
+                    query=question,
+                    clarification=ClarificationRequest(
+                        reason="missing_topic",
+                        prompt="Which part of osu! do you mean?",
+                        options=("gameplay", "client"),
+                    ),
+                ),
+                search_query=question,
+            )
+
+    class FailGenerator:
+        def generate(self, prompt: str):
+            raise AssertionError("generator should not be called for clarification")
+
+    response = ChatService(
+        AppConfig(),
+        retriever=FakeRetriever(),
+        generator=FailGenerator(),
+    ).ask("help me")
+
+    assert response.answer == "Which part of osu! do you mean?"
+    assert response.response_type == "clarification"
+    assert response.sources == []
+    assert response.clarification.reason == "missing_topic"
+    assert response.clarification.options == ["gameplay", "client"]

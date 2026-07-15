@@ -47,12 +47,13 @@ Topic aliases are an offline artifact, not a hand-maintained runtime taxonomy. E
   "canonical_document_id": "Beatmap/Stack_leniency",
   "topic_document_ids": ["Beatmap/Stack_leniency"],
   "confidence": 1.0,
+  "preference_strength": "strong",
   "target_source": "osu-wiki",
   "retrieval_lane": "canonical"
 }
 ```
 
-`canonical_document_id`, `topic_document_ids`, `target_source`, and `retrieval_lane` are optional. This lets GLiNER or a later classifier enrich candidate aliases offline while deterministic validation, confidence thresholds, and ambiguity checks protect the serving path.
+`canonical_document_id`, `topic_document_ids`, `preference_strength`, `target_source`, and `retrieval_lane` are optional. `preference_strength` is either `strong` or `soft`: strong topics may reserve several evidence slots, while soft topics reserve only one before general dense retrieval fills the context. When the field is absent, the resolver conservatively infers it from title/path evidence and identifier overlap. This lets GLiNER or a later classifier enrich candidate aliases offline while deterministic validation, confidence thresholds, ambiguity checks, and bounded focus protect the serving path.
 
 The runtime defaults to multi-token, high-confidence aliases. This deliberately avoids hard-routing generic words such as `sound` or `people`. The thresholds are configuration, so a cleaner future corpus may use a different policy.
 
@@ -88,6 +89,18 @@ Tool selection should be a sibling of retrieval, not another retrieval intent la
 
 The tool router should return a structured action plan. It should not encode tool names into document aliases, and retrieval should remain available as evidence for a tool call when useful.
 
+## Clarification outcome
+
+`QueryAnalysis` may carry a structured `ClarificationRequest` with a reason, prompt, and suggested topic families. The serving path returns this as `response_type: "clarification"`, skips dense retrieval and generation, and exposes the structured prompt through the API.
+
+The current policy is intentionally high precision: it only catches a small set of topic-free requests such as `help me` or `it does not work`. Short but specific questions continue through retrieval. Expand the policy from reviewed feedback, not from broad pronoun or token-count heuristics that could block valid questions.
+
 ## Feedback loop
 
-Discord reactions can be logged as evaluation data: query, analysis, retrieved chunk IDs, answer version, and explicit positive or negative feedback. Do not mutate routing weights live from a single reaction. Review and aggregate feedback offline, add representative evaluation cases, then promote a new alias artifact or analyzer only when the benchmark and regression tests improve.
+Discord reactions can be logged as source-neutral `FeedbackEvent` records: query, analysis, retrieved chunk and document IDs, answer version, and explicit positive, negative, or corrective feedback. Raw user IDs should not be stored in learning artifacts.
+
+Feedback promotion is a separate offline operation. A `FeedbackReview` must explicitly accept an event and assign canonical topic IDs before it becomes a `QueryTopicExample`; reactions and the analyzer's own predictions never become labels automatically. The promotion command can exclude normalized queries from an evaluation file, and its output omits runtime analysis and retrieved context.
+
+Do not mutate routing weights live from a single reaction. Review and aggregate feedback offline, compare a trained classifier or reranker against the deterministic resolver, then promote a new analyzer only when development metrics and regression tests improve. Once benchmark failures influence training examples, treat that benchmark as a development set and retain a separately collected locked test split for final claims.
+
+The schemas and workflow are documented in `training/README.md`.

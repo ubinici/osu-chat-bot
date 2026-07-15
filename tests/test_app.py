@@ -58,6 +58,64 @@ def test_cli_dispatches_dense_evaluation(monkeypatch, tmp_path) -> None:
     assert calls == [({"config": "config.toml"}, dataset, {"output": None, "top_k": None})]
 
 
+def test_cli_dispatches_topic_dataset_promotion(monkeypatch, tmp_path) -> None:
+    calls = []
+    feedback = tmp_path / "feedback.jsonl"
+    reviews = tmp_path / "reviews.jsonl"
+    output = tmp_path / "topics.jsonl"
+    held_out = tmp_path / "eval.jsonl"
+    monkeypatch.setattr(cli, "load_config", lambda path: {"config": path})
+    monkeypatch.setattr(
+        cli.commands,
+        "run_build_topic_dataset",
+        lambda feedback, reviews, **kwargs: calls.append((feedback, reviews, kwargs)) or 0,
+    )
+
+    assert cli.main(
+        [
+            "build-topic-dataset",
+            str(feedback),
+            str(reviews),
+            "--output",
+            str(output),
+            "--held-out",
+            str(held_out),
+        ]
+    ) == 0
+    assert calls == [(feedback, reviews, {"output": output, "held_out": held_out})]
+
+
+def test_cli_dispatches_topic_model_evaluation(monkeypatch, tmp_path) -> None:
+    calls = []
+    dataset = tmp_path / "topics.jsonl"
+    aliases = tmp_path / "aliases.jsonl"
+    report = tmp_path / "report.json"
+    monkeypatch.setattr(cli, "load_config", lambda path: {"config": path})
+    monkeypatch.setattr(
+        cli.commands,
+        "run_eval_topic_model",
+        lambda config, dataset, **kwargs: calls.append((config, dataset, kwargs)) or 0,
+    )
+
+    assert cli.main(
+        [
+            "eval-topic-model",
+            str(dataset),
+            "--alias-artifact",
+            str(aliases),
+            "--output",
+            str(report),
+        ]
+    ) == 0
+    assert calls == [
+        (
+            {"config": "config.toml"},
+            dataset,
+            {"alias_artifact": aliases, "split": "validation", "top_k": 3, "output": report},
+        )
+    ]
+
+
 def test_cli_dispatches_server_with_one_worker_configuration(monkeypatch) -> None:
     calls = []
     monkeypatch.setattr(cli, "load_config", lambda path: {"config": path})

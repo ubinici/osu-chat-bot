@@ -21,6 +21,7 @@ top_k = 3
 alias_minimum_confidence = 0.9
 alias_minimum_tokens = 3
 preferred_document_limit = 2
+soft_preferred_document_limit = 1
 canonical_source_types = ["wiki", "handbook"]
 temporal_source_types = ["news", "forum"]
 excluded_chunk_types = ["citation"]
@@ -49,6 +50,7 @@ excluded_chunk_types = ["citation"]
     assert config.retrieval.alias_minimum_confidence == 0.9
     assert config.retrieval.alias_minimum_tokens == 3
     assert config.retrieval.preferred_document_limit == 2
+    assert config.retrieval.soft_preferred_document_limit == 1
     assert config.retrieval.canonical_source_types == ("wiki", "handbook")
     assert config.retrieval.temporal_source_types == ("news", "forum")
     assert config.retrieval.excluded_chunk_types == ("citation",)

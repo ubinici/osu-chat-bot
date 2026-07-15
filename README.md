@@ -76,6 +76,7 @@ alias_artifact = "document_aliases.jsonl"
 alias_minimum_confidence = 0.85
 alias_minimum_tokens = 2
 preferred_document_limit = 4
+soft_preferred_document_limit = 1
 canonical_source_types = ["wiki"]
 temporal_source_types = ["wiki", "news"]
 excluded_chunk_types = ["citation", "formula"]
@@ -125,6 +126,25 @@ osu-bot eval eval/osu_seed.jsonl --output artifacts/rag/eval_dense_report.json
 osu-bot eval eval/osu_seed.jsonl --top-k 10
 ```
 
+Build a reviewed query-to-topic dataset from future serving feedback while excluding exact benchmark-query overlap:
+
+```powershell
+osu-bot build-topic-dataset artifacts/feedback/events.jsonl artifacts/feedback/reviews.jsonl `
+  --output artifacts/learning/query_topics_feedback.jsonl `
+  --held-out eval/osu_seed.jsonl
+```
+
+The initial reviewed paraphrase set and feedback schemas live in [training/README.md](training/README.md).
+
+Compare a semantic query-topic baseline with the deterministic alias resolver:
+
+```powershell
+osu-bot eval-topic-model training/query_topics_seed.jsonl `
+  --alias-artifact artifacts/rag/alias_build_check/document_aliases.jsonl
+```
+
+The chat response also has an explicit `response_type`. Very small, high-confidence cases of missing context return `clarification` with a structured prompt and options, without calling retrieval or generation.
+
 Reports include Hit@1, Hit@3, Hit@6, mean reciprocal rank, resolved topics, and retrieval lanes. Expectations use actual corpus document IDs so the metric describes retrieval behavior without hidden topic-routing equivalences.
 
 The source-neutral record, alias, retrieval, future tool-routing, and feedback contracts are documented in [docs/architecture.md](docs/architecture.md).
@@ -136,6 +156,7 @@ The source-neutral record, alias, retrieval, future tool-routing, and feedback c
 - `osu_chatbot.retrieval`: replaceable query analysis, retrieval policy, and dense backend.
 - `osu_chatbot.generation`: grounded prompt and replaceable generation providers.
 - `osu_chatbot.evaluation`: retrieval datasets and metrics.
+- `osu_chatbot.learning`: reviewed feedback and query-to-topic dataset contracts.
 - `osu_chatbot.quality`: artifact validation and statistics.
 - `osu_chatbot.app`: CLI entry point.
 

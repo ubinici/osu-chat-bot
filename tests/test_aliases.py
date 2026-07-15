@@ -54,9 +54,21 @@ def test_build_document_aliases_supports_independent_and_related_sources(tmp_pat
     rows = read_jsonl(tmp_path / DOCUMENT_ALIASES_FILE)
 
     assert report == {"documents": 2, "accepted_link_aliases": 1, "aliases": 5}
-    assert any(row["alias_key"] == "ar setting" and row["source"] == "accepted_link" for row in rows)
+    ar_setting = next(
+        row
+        for row in rows
+        if row["alias_key"] == "ar setting" and row["source"] == "accepted_link"
+    )
+    assert ar_setting["preference_strength"] == "soft"
+    approach_rate = next(
+        row
+        for row in rows
+        if row["alias_key"] == "approach rate" and row["source"] == "title"
+    )
+    assert approach_rate["preference_strength"] == "strong"
     community = next(row for row in rows if row["alias_key"] == "community ar explanation")
     assert community["canonical_document_id"] == "discord:123"
     assert community["topic_document_ids"] == ["discord:123", "Beatmapping"]
     assert community["target_source"] == "community-discord"
+    assert community["preference_strength"] == "soft"
     assert not any(row["alias_key"] == "ambiguous ar" for row in rows)

@@ -61,6 +61,12 @@ class Retriever:
             )
 
         analysis = self.analyzer.analyze(clean_query)
+        if analysis.requires_clarification:
+            return RetrievalOutcome(
+                results=[],
+                analysis=analysis,
+                search_query=clean_query,
+            )
         search_query = build_retrieval_query(clean_query, analysis.intent)
         limit = self.config.retrieval.top_k if top_k is None else top_k
         source_types = (
@@ -73,15 +79,28 @@ class Retriever:
             "excluded_chunk_types": self.config.retrieval.excluded_chunk_types,
         }
         results: list[SearchResult] = []
-        preferred_document_ids = analysis.preferred_document_ids
-        if preferred_document_ids:
+        strong_document_ids = analysis.strong_preferred_document_ids
+        if strong_document_ids:
             results = self.backend.search(
                 RetrievalRequest(
                     **common_request,
                     limit=min(limit, self.config.retrieval.preferred_document_limit),
-                    document_ids=preferred_document_ids,
+                    document_ids=strong_document_ids,
                 )
             )
+        soft_document_ids = analysis.soft_preferred_document_ids
+        if soft_document_ids and len(results) < limit:
+            soft_results = self.backend.search(
+                RetrievalRequest(
+                    **common_request,
+                    limit=min(
+                        limit - len(results),
+                        self.config.retrieval.soft_preferred_document_limit,
+                    ),
+                    document_ids=soft_document_ids,
+                )
+            )
+            results = merge_results(results, soft_results, limit=limit)
         if len(results) < limit:
             general_results = self.backend.search(
                 RetrievalRequest(
