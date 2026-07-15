@@ -1,6 +1,7 @@
 from osu_chatbot.app.service import ChatService
 from osu_chatbot.config import AppConfig
 from osu_chatbot.domain.models import Chunk, QueryIntent, SearchResult
+from osu_chatbot.retrieval.models import QueryAnalysis
 from osu_chatbot.retrieval.service import RetrievalOutcome
 
 
@@ -24,7 +25,10 @@ def test_chat_service_runs_complete_cited_pipeline() -> None:
             assert question == "what does AR do?"
             return RetrievalOutcome(
                 results=[search_result],
-                intent=QueryIntent(labels={"definition"}),
+                analysis=QueryAnalysis(
+                    query=question,
+                    intent=QueryIntent(labels={"definition"}),
+                ),
                 search_query="what does AR do?\nRelated osu! terms: approach, rate",
             )
 
@@ -48,5 +52,7 @@ def test_chat_service_runs_complete_cited_pipeline() -> None:
     assert response.intent == ["definition"]
     assert response.sources[0].citation == 1
     assert response.sources[0].score == 0.912346
+    assert response.retrieval_lane == "canonical"
+    assert response.resolved_topics == []
     assert response.latency_ms >= 0
     assert service.is_ready()

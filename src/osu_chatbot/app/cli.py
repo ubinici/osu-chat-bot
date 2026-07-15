@@ -18,6 +18,7 @@ def main(argv: list[str] | None = None) -> int:
     subparsers.add_parser("ingest", help="Parse osu-wiki markdown into documents and chunks")
     subparsers.add_parser("terms", help="Build osu!-specific terminology dictionary")
     subparsers.add_parser("links", help="Build reviewable hyperlink alias artifacts")
+    subparsers.add_parser("aliases", help="Build the runtime document alias artifact")
     entities_parser = subparsers.add_parser("entities", help="Extract generative entity candidates from chunks")
     entities_parser.add_argument("--backend", default="gliner", choices=["gliner"], help="Entity extraction backend")
     entities_parser.add_argument("--model", default=None, help="Backend model name")
@@ -66,6 +67,7 @@ def main(argv: list[str] | None = None) -> int:
     eval_parser = subparsers.add_parser("eval", help="Run retrieval evaluation from a JSONL dataset")
     eval_parser.add_argument("dataset", type=Path)
     eval_parser.add_argument("--output", type=Path, help="Optional JSON report path")
+    eval_parser.add_argument("--top-k", type=int, help="Override retrieval depth for this evaluation")
 
     args = parser.parse_args(argv)
     config = load_config(args.config)
@@ -77,6 +79,8 @@ def main(argv: list[str] | None = None) -> int:
             return commands.run_terms(config)
         if args.command == "links":
             return commands.run_links(config)
+        if args.command == "aliases":
+            return commands.run_aliases(config)
         if args.command == "entities":
             return commands.run_entities(
                 config,
@@ -112,7 +116,7 @@ def main(argv: list[str] | None = None) -> int:
         if args.command == "serve":
             return commands.run_server(config, host=args.host, port=args.port)
         if args.command == "eval":
-            return commands.run_eval(config, args.dataset, output=args.output)
+            return commands.run_eval(config, args.dataset, output=args.output, top_k=args.top_k)
     except Exception as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1

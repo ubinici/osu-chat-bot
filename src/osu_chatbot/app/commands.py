@@ -8,6 +8,7 @@ from ..corpus.parser import parse_news_file, parse_wiki_file
 from ..corpus.sources import iter_news_files, iter_wiki_files
 from ..domain.artifacts import (
     CHUNKS_FILE,
+    DOCUMENT_ALIASES_FILE,
     DOCUMENTS_FILE,
     INGEST_REPORT_FILE,
     LINK_ALIAS_REVIEW_FILE,
@@ -25,6 +26,7 @@ from ..domain.artifacts import (
 from ..evaluation.runner import run_evaluation
 from ..indexing.pipeline import IndexOptions, build_index
 from ..knowledge.links import build_link_artifacts
+from ..knowledge.aliases import build_document_aliases
 from ..knowledge.ner import build_entity_candidates_from_artifacts
 from ..knowledge.normalization import build_entity_normalization_artifacts
 from ..knowledge.terms import build_terms_from_artifacts
@@ -99,6 +101,18 @@ def run_links(config: AppConfig) -> int:
         f"rejected={report['rejected_candidates']}"
     )
     print(f"Artifacts: {config.artifacts.path / LINK_ALIAS_REVIEW_FILE}")
+    return 0
+
+
+def run_aliases(config: AppConfig) -> int:
+    report = build_document_aliases(
+        artifact_read_path(config),
+        output_dir=config.artifacts.path,
+    )
+    print(f"Documents: {report['documents']}")
+    print(f"Accepted link aliases: {report['accepted_link_aliases']}")
+    print(f"Aliases: {report['aliases']}")
+    print(f"Artifact: {config.artifacts.path / DOCUMENT_ALIASES_FILE}")
     return 0
 
 
@@ -207,6 +221,12 @@ def run_inspect(config: AppConfig, question: str) -> int:
     results = outcome.results
     labels = ", ".join(sorted(outcome.intent.labels)) or "general"
     print(f"Intent: {labels}")
+    print(f"Retrieval lane: {outcome.analysis.retrieval_lane}")
+    if outcome.analysis.topics:
+        print("Resolved topics:")
+        for topic in outcome.analysis.topics:
+            documents = ", ".join(topic.document_ids)
+            print(f"  {topic.matched_alias!r} -> {topic.canonical_id} ({topic.confidence:.2f}): {documents}")
     if outcome.search_query != question:
         print(f"Search query: {outcome.search_query}")
     for rank, result in enumerate(results, start=1):
@@ -246,13 +266,21 @@ def run_eval(
     dataset: Path,
     *,
     output: Path | None = None,
+    top_k: int | None = None,
 ) -> int:
-    report = run_evaluation(config, dataset)
+    report = run_evaluation(config, dataset, top_k=top_k)
     summary = report["summary"]
     print(f"Examples: {summary['examples']}")
     print(f"Judged: {summary['judged_examples']}")
     print(f"Matches: {summary['matches']}")
     print(f"Retrieval accuracy: {summary['retrieval_accuracy']:.3f}")
+    print(
+        "Ranking quality: "
+        f"Hit@1={summary['hit_at_1']:.3f}, "
+        f"Hit@3={summary['hit_at_3']:.3f}, "
+        f"Hit@6={summary['hit_at_6']:.3f}, "
+        f"MRR={summary['mean_reciprocal_rank']:.3f}"
+    )
     for category, category_summary in report.get("by_category", {}).items():
         print(
             f"  {category}: "

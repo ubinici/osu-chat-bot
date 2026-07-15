@@ -12,6 +12,7 @@ T = TypeVar("T")
 DOCUMENTS_FILE = "documents_structured.jsonl"
 CHUNKS_FILE = "chunks_hierarchical.jsonl"
 TERMS_FILE = "terms.json"
+DOCUMENT_ALIASES_FILE = "document_aliases.jsonl"
 ENTITY_CANDIDATES_FILE = "entity_candidates_generative.jsonl"
 ENTITY_CANDIDATES_REPORT_FILE = "entity_candidates_report.json"
 ENTITY_NORMALIZATION_FILE = "entity_normalization_candidates.jsonl"

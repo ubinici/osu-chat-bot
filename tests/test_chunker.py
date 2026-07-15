@@ -101,3 +101,34 @@ def test_large_tables_are_split_without_omitting_rows() -> None:
     assert "row-1" in text
     assert "row-6" in text
     assert "additional rows omitted" not in text
+
+
+def test_generic_source_record_preserves_source_metadata_and_relations() -> None:
+    record = {
+        "id": "discord:123",
+        "source": "community-discord",
+        "source_type": "community",
+        "file_path": "exports/channel-1.jsonl",
+        "url": "https://discord.com/channels/example/123",
+        "title": "Mapping discussion",
+        "date": "2026-07-15",
+        "metadata": {"channel_id": "channel-1"},
+        "external_ids": {"message_id": "123"},
+        "relations": [{"type": "mentions", "document_id": "Beatmapping/Timing"}],
+        "sections": [
+            {
+                "section_id": "message",
+                "title": "Message",
+                "text": "A loosely structured community explanation of timing.",
+            }
+        ],
+    }
+
+    chunks = build_chunks_from_record(record)
+
+    assert all(chunk.document_id == "discord:123" for chunk in chunks)
+    assert all(chunk.source_type == "community" for chunk in chunks)
+    assert all(chunk.file_path == "exports/channel-1.jsonl" for chunk in chunks)
+    assert all(chunk.osu_url.endswith("/123") for chunk in chunks)
+    assert chunks[0].metadata["channel_id"] == "channel-1"
+    assert chunks[0].metadata["relations"][0]["document_id"] == "Beatmapping/Timing"

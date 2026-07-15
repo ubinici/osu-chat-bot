@@ -22,7 +22,7 @@ def build_chunks_from_record(
     if chunk_overlap_tokens < 0 or chunk_overlap_tokens >= max_chunk_tokens:
         raise ValueError("chunk_overlap_tokens must be between zero and max_chunk_tokens.")
     root_id, root_kind = resolve_root_id(record)
-    source_type = "news" if record.get("source") == "osu-news" else "wiki"
+    source_type = resolve_source_type(record)
     title = str(record.get("title") or root_id)
     base = build_base_metadata(record, root_id=root_id, root_kind=root_kind, source_type=source_type, title=title)
     chunks: list[Chunk] = []
@@ -174,21 +174,23 @@ def make_chunk(record: dict[str, Any], metadata: dict[str, Any], text: str, chun
         id=chunk_id,
         document_id=root_id,
         source_type=source_type,
-        file_path=str(record.get("repo_rel_path") or ""),
-        osu_url=str(record.get("osu_url") or ""),
+        file_path=str(record.get("file_path") or record.get("repo_rel_path") or ""),
+        osu_url=str(record.get("url") or record.get("osu_url") or ""),
         title=str(record.get("title") or root_id),
         text=text.strip(),
         chunk_index=index,
         heading_path=heading_path or [str(record.get("title") or root_id)],
         tags=safe_str_list(record.get("tags")) + safe_str_list(record.get("series_tags")),
-        date=record.get("date_iso") or record.get("filename_date"),
-        series=record.get("series_primary"),
+        date=record.get("date") or record.get("date_iso") or record.get("filename_date"),
+        series=record.get("series") or record.get("series_primary"),
         metadata=compact_metadata({**metadata, "chunk_type": chunk_type}),
     )
 
 
 def build_base_metadata(record: dict[str, Any], *, root_id: str, root_kind: str, source_type: str, title: str) -> dict[str, Any]:
+    source_metadata = record.get("metadata") if isinstance(record.get("metadata"), dict) else {}
     metadata = {
+        **source_metadata,
         "chunk_schema": "hier-v1",
         "source": record.get("source"),
         "source_type": source_type,
@@ -207,6 +209,8 @@ def build_base_metadata(record: dict[str, Any], *, root_id: str, root_kind: str,
         "is_stub": record.get("is_stub"),
         "page_id": record.get("page_id"),
         "post_id": record.get("post_id"),
+        "external_ids": record.get("external_ids"),
+        "relations": record.get("relations"),
     }
     return compact_metadata(metadata)
 
@@ -344,6 +348,18 @@ def resolve_root_id(record: dict[str, Any]) -> tuple[str, str]:
         if value:
             return value, kind
     return "unknown", "record"
+
+
+def resolve_source_type(record: dict[str, Any]) -> str:
+    explicit = str(record.get("source_type") or "").strip()
+    if explicit:
+        return explicit
+    source = str(record.get("source") or "").strip()
+    if source == "osu-news":
+        return "news"
+    if source == "osu-wiki":
+        return "wiki"
+    return source or "unknown"
 
 
 def build_chunks(record: dict[str, Any]) -> list[Chunk]:

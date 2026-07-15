@@ -14,12 +14,13 @@ def run_evaluation(
     dataset_path: Path,
     *,
     retriever: Retriever | None = None,
+    top_k: int | None = None,
 ) -> dict[str, Any]:
     examples = load_evaluation_dataset(dataset_path)
     retriever = retriever or Retriever(config)
     rows = []
     for example in examples:
-        outcome = retriever.retrieve(example.question)
+        outcome = retriever.retrieve(example.question, top_k=top_k)
         results = outcome.results
         score = score_retrieval(example, results)
         rows.append(
@@ -29,6 +30,16 @@ def run_evaluation(
                 "expected_chunk_ids": example.expected_chunk_ids,
                 "expected_document_ids": example.expected_document_ids,
                 "intent": sorted(outcome.intent.labels),
+                "retrieval_lane": outcome.analysis.retrieval_lane,
+                "resolved_topics": [
+                    {
+                        "canonical_id": topic.canonical_id,
+                        "matched_alias": topic.matched_alias,
+                        "document_ids": list(topic.document_ids),
+                        "confidence": round(topic.confidence, 6),
+                    }
+                    for topic in outcome.analysis.topics
+                ],
                 "search_query": outcome.search_query,
                 "top_chunk_ids": [result.chunk.id for result in results],
                 "top_document_ids": [result.chunk.document_id for result in results],

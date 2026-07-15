@@ -37,6 +37,13 @@ class QdrantConfig:
 @dataclass(frozen=True)
 class RetrievalConfig:
     top_k: int = 6
+    alias_artifact: str = "document_aliases.jsonl"
+    alias_minimum_confidence: float = 0.85
+    alias_minimum_tokens: int = 2
+    preferred_document_limit: int = 4
+    canonical_source_types: tuple[str, ...] = ("wiki",)
+    temporal_source_types: tuple[str, ...] = ("wiki", "news")
+    excluded_chunk_types: tuple[str, ...] = ("citation", "formula")
 
 
 @dataclass(frozen=True)
@@ -67,6 +74,7 @@ def load_config(path: str | Path = "config.toml") -> AppConfig:
     artifact_data = data.get("artifacts", {})
     source_path = os.environ.get("OSU_BOT_ARTIFACT_SOURCE_PATH") or artifact_data.get("source_path")
     qdrant_data = data.get("qdrant", {})
+    retrieval_data = data.get("retrieval", {})
     generation_data = data.get("generation", {})
     if not generation_data and data.get("ollama"):
         generation_data = {"provider": "ollama", **data["ollama"]}
@@ -92,7 +100,23 @@ def load_config(path: str | Path = "config.toml") -> AppConfig:
             vector_size=int(os.environ.get("OSU_BOT_QDRANT_VECTOR_SIZE") or qdrant_data.get("vector_size", 384)),
         ),
         retrieval=RetrievalConfig(
-            top_k=int(data.get("retrieval", {}).get("top_k", 6)),
+            top_k=int(retrieval_data.get("top_k", 6)),
+            alias_artifact=str(retrieval_data.get("alias_artifact", "document_aliases.jsonl")),
+            alias_minimum_confidence=float(retrieval_data.get("alias_minimum_confidence", 0.85)),
+            alias_minimum_tokens=max(1, int(retrieval_data.get("alias_minimum_tokens", 2))),
+            preferred_document_limit=max(1, int(retrieval_data.get("preferred_document_limit", 4))),
+            canonical_source_types=_string_tuple(
+                retrieval_data.get("canonical_source_types"),
+                ("wiki",),
+            ),
+            temporal_source_types=_string_tuple(
+                retrieval_data.get("temporal_source_types"),
+                ("wiki", "news"),
+            ),
+            excluded_chunk_types=_string_tuple(
+                retrieval_data.get("excluded_chunk_types"),
+                ("citation", "formula"),
+            ),
         ),
         generation=GenerationConfig(
             provider=(
@@ -133,3 +157,11 @@ def _parse_think(value: object) -> bool | str:
     if normalized in {"", "0", "false", "no", "off"}:
         return False
     raise ValueError("generation think must be true, false, low, medium, or high")
+
+
+def _string_tuple(value: object, default: tuple[str, ...]) -> tuple[str, ...]:
+    if value is None:
+        return default
+    if not isinstance(value, (list, tuple)):
+        raise ValueError("retrieval source and chunk type settings must be arrays")
+    return tuple(str(item).strip() for item in value if str(item).strip())

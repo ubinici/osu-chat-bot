@@ -3,6 +3,8 @@ from pathlib import Path
 from osu_chatbot.config import AppConfig, RetrievalConfig
 from osu_chatbot.domain.models import Chunk, SearchResult
 from osu_chatbot.evaluation.runner import run_evaluation
+from osu_chatbot.retrieval.analysis import DefaultQueryAnalyzer
+from osu_chatbot.retrieval.models import RetrievalRequest
 from osu_chatbot.retrieval.service import Retriever
 
 
@@ -30,19 +32,23 @@ def test_run_evaluation_scores_dense_retrieval_and_reports_query_analysis(tmp_pa
     )
 
     class StaticBackend:
-        def search(self, query: str, limit: int):
-            assert query == "What is a beatmap?"
-            assert limit == 1
+        def search(self, request: RetrievalRequest):
+            assert request.query == "What is a beatmap?"
+            assert request.limit == 1
             return [result]
 
     config = AppConfig(retrieval=RetrievalConfig(top_k=1))
-    retriever = Retriever(config, backend=StaticBackend())
+    retriever = Retriever(config, backend=StaticBackend(), analyzer=DefaultQueryAnalyzer())
     report = run_evaluation(config, dataset, retriever=retriever)
 
     assert report["summary"]["examples"] == 1
     assert report["summary"]["matches"] == 1
+    assert report["summary"]["hit_at_1"] == 1.0
+    assert report["summary"]["mean_reciprocal_rank"] == 1.0
     assert report["by_category"]["definition"]["matches"] == 1
     assert report["examples"][0]["intent"] == ["definition"]
+    assert report["examples"][0]["retrieval_lane"] == "canonical"
+    assert report["examples"][0]["resolved_topics"] == []
     assert report["examples"][0]["top_sources"] == [
         {
             "chunk_id": "beatmap::article",
@@ -74,11 +80,15 @@ def test_evaluation_requires_actual_document_ids(tmp_path: Path) -> None:
     )
 
     class StaticBackend:
-        def search(self, query: str, limit: int):
+        def search(self, request: RetrievalRequest):
             return [result]
 
     config = AppConfig(retrieval=RetrievalConfig(top_k=1))
-    report = run_evaluation(config, dataset, retriever=Retriever(config, backend=StaticBackend()))
+    report = run_evaluation(
+        config,
+        dataset,
+        retriever=Retriever(config, backend=StaticBackend(), analyzer=DefaultQueryAnalyzer()),
+    )
 
     assert report["summary"]["matches"] == 1
     assert report["examples"][0]["document_match"] == 1

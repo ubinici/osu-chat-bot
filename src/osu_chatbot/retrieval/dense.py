@@ -6,6 +6,7 @@ from ..config import AppConfig
 from ..domain.models import Chunk, SearchResult
 from ..indexing.embeddings import SentenceTransformerEmbeddings
 from ..indexing.vector_store import qdrant_client
+from .models import RetrievalRequest
 
 
 CHUNK_PAYLOAD_KEYS = {
@@ -32,15 +33,21 @@ class DenseRetriever:
         self._embedder = embedder or SentenceTransformerEmbeddings(config.embedding)
         self._client = client or qdrant_client(config.qdrant.url)
 
-    def search(self, query: str, limit: int) -> list[SearchResult]:
-        if limit <= 0:
+    def search(self, request: RetrievalRequest) -> list[SearchResult]:
+        if request.limit <= 0:
             return []
-        query_vector = self._embedder.encode([query])[0]
+        query_vector = self._embedder.encode([request.query])[0]
+        query_kwargs = {
+            "collection_name": self.config.qdrant.collection,
+            "query": query_vector,
+            "limit": request.limit,
+            "with_payload": True,
+        }
+        query_filter = build_qdrant_filter(request)
+        if query_filter is not None:
+            query_kwargs["query_filter"] = query_filter
         response = self._client.query_points(
-            collection_name=self.config.qdrant.collection,
-            query=query_vector,
-            limit=limit,
-            with_payload=True,
+            **query_kwargs,
         )
         results: list[SearchResult] = []
         for hit in response.points:
@@ -54,6 +61,37 @@ class DenseRetriever:
 
     def is_ready(self) -> bool:
         return bool(self._client.collection_exists(self.config.qdrant.collection))
+
+
+def build_qdrant_filter(request: RetrievalRequest):
+    if not request.source_types and not request.document_ids and not request.excluded_chunk_types:
+        return None
+    from qdrant_client.http import models
+
+    must = []
+    if request.source_types:
+        must.append(
+            models.FieldCondition(
+                key="source_type",
+                match=models.MatchAny(any=list(request.source_types)),
+            )
+        )
+    if request.document_ids:
+        must.append(
+            models.FieldCondition(
+                key="document_id",
+                match=models.MatchAny(any=list(request.document_ids)),
+            )
+        )
+    must_not = []
+    if request.excluded_chunk_types:
+        must_not.append(
+            models.FieldCondition(
+                key="chunk_type",
+                match=models.MatchAny(any=list(request.excluded_chunk_types)),
+            )
+        )
+    return models.Filter(must=must or None, must_not=must_not or None)
 
 
 def chunk_from_payload(payload: dict[str, Any]) -> Chunk:

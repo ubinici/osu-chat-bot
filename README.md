@@ -7,8 +7,8 @@ The current corpus is the English osu! wiki and osu! news archive. Corpus adapte
 ## Pipeline
 
 ```text
-offline: osu! sources -> documents -> embedding-sized chunks -> Qdrant
-online:  query -> intent and alias hints -> dense retrieval -> grounded prompt -> answer with citations
+offline: source adapters -> normalized documents + aliases -> embedding-sized chunks -> Qdrant
+online:  query -> query analysis -> retrieval policy -> dense retrieval -> grounded answer with citations
 ```
 
 The serving path deliberately uses one retrieval strategy. Qdrant stores the complete chunk payload, so querying does not load the large document and chunk JSONL artifacts into application memory.
@@ -20,6 +20,8 @@ Python 3.11 or newer is required.
 ```powershell
 python -m pip install -e ".[dev]"
 osu-bot ingest
+osu-bot links
+osu-bot aliases
 osu-bot validate
 osu-bot index
 osu-bot inspect "What does AR change?"
@@ -44,6 +46,8 @@ It exposes `GET /healthz`, `GET /readyz`, and `POST /v1/chat`.
 ## Commands
 
 - `ingest`: parse configured sources into documents and embedding-sized chunks.
+- `links`: derive reviewable alias evidence from document links.
+- `aliases`: build the compact runtime topic-alias artifact.
 - `validate`: check generated artifacts before indexing.
 - `index`: embed chunks and upsert their vectors and complete payloads into Qdrant.
 - `inspect`: show query analysis and retrieved chunks without generation.
@@ -51,7 +55,7 @@ It exposes `GET /healthz`, `GET /readyz`, and `POST /v1/chat`.
 - `query`: retrieve evidence and ask the configured generator for a cited answer.
 - `serve`: run the minimal HTTP chat API with one inference worker.
 
-Additional `terms`, `links`, `entities`, `normalize-entities`, and `stats` commands are offline corpus-analysis utilities. They are not required by the serving path.
+Additional `terms`, `entities`, `normalize-entities`, and `stats` commands are offline corpus-analysis utilities. They are not required by the serving path.
 
 ## Configuration
 
@@ -68,6 +72,13 @@ vector_size = 384
 
 [retrieval]
 top_k = 6
+alias_artifact = "document_aliases.jsonl"
+alias_minimum_confidence = 0.85
+alias_minimum_tokens = 2
+preferred_document_limit = 4
+canonical_source_types = ["wiki"]
+temporal_source_types = ["wiki", "news"]
+excluded_chunk_types = ["citation", "formula"]
 
 [generation]
 provider = "ollama"
@@ -111,15 +122,18 @@ The seed set contains direct terminology, colloquial questions, and support symp
 ```powershell
 osu-bot eval eval/osu_seed.jsonl
 osu-bot eval eval/osu_seed.jsonl --output artifacts/rag/eval_dense_report.json
+osu-bot eval eval/osu_seed.jsonl --top-k 10
 ```
 
-Expectations use actual corpus document IDs so the metric describes retrieval behavior without hidden topic-routing equivalences.
+Reports include Hit@1, Hit@3, Hit@6, mean reciprocal rank, resolved topics, and retrieval lanes. Expectations use actual corpus document IDs so the metric describes retrieval behavior without hidden topic-routing equivalences.
+
+The source-neutral record, alias, retrieval, future tool-routing, and feedback contracts are documented in [docs/architecture.md](docs/architecture.md).
 
 ## Package layout
 
 - `osu_chatbot.corpus`: source parsing and chunk construction.
 - `osu_chatbot.indexing`: embeddings and Qdrant indexing.
-- `osu_chatbot.retrieval`: intent hints and the replaceable dense backend.
+- `osu_chatbot.retrieval`: replaceable query analysis, retrieval policy, and dense backend.
 - `osu_chatbot.generation`: grounded prompt and replaceable generation providers.
 - `osu_chatbot.evaluation`: retrieval datasets and metrics.
 - `osu_chatbot.quality`: artifact validation and statistics.

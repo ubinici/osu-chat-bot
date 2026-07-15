@@ -20,6 +20,13 @@ vector_size = 384
 
 [retrieval]
 top_k = 6
+alias_artifact = "document_aliases.jsonl"
+alias_minimum_confidence = 0.85
+alias_minimum_tokens = 2
+preferred_document_limit = 4
+canonical_source_types = ["wiki"]
+temporal_source_types = ["wiki", "news"]
+excluded_chunk_types = ["citation", "formula"]
 
 [generation]
 provider = "ollama"

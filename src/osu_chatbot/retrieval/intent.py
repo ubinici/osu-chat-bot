@@ -46,9 +46,25 @@ PERFORMANCE_TERMS = {
     "stutter",
     "stuttering",
 }
-ACCESS_TERMS = {"access", "download", "get", "install", "open", "use", "using"}
+ACCESS_TERMS = {"access", "download", "install", "installation"}
+TEMPORAL_TERMS = {
+    "current",
+    "currently",
+    "latest",
+    "news",
+    "newest",
+    "recent",
+    "recently",
+    "today",
+    "update",
+    "updated",
+}
 DEFINITION_PATTERNS = [
     re.compile(r"\bwhat\s+(is|are)\b", re.IGNORECASE),
+    re.compile(r"\bwhat\s+does\b", re.IGNORECASE),
+    re.compile(r"\bwhat\s+.+?\s+mean\b", re.IGNORECASE),
+    re.compile(r"\bexplain\s+what\b", re.IGNORECASE),
+    re.compile(r"\bwho\s+or\s+what\s+is\b", re.IGNORECASE),
     re.compile(r"\bdefine\b", re.IGNORECASE),
     re.compile(r"\bmeaning\s+of\b", re.IGNORECASE),
 ]
@@ -84,7 +100,11 @@ def classify_query(query: str) -> QueryIntent:
 
     if raw_tokens.intersection(ACCESS_TERMS) or tokens.intersection(ACCESS_TERMS):
         labels.add("access")
-        expanded_terms.update({"access", "open", "use", "download"})
+        expanded_terms.update({"access", "download", "install"})
+
+    if raw_tokens.intersection(TEMPORAL_TERMS) or tokens.intersection(TEMPORAL_TERMS):
+        labels.add("temporal")
+        expanded_terms.update({"current", "latest", "news", "update"})
 
     if any(pattern.search(query) for pattern in DEFINITION_PATTERNS):
         labels.add("definition")

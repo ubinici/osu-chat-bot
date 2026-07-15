@@ -30,6 +30,15 @@ def test_cli_dispatches_normalize_entities_command(monkeypatch) -> None:
     assert calls == [{"config": "config.toml"}]
 
 
+def test_cli_dispatches_alias_artifact_command(monkeypatch) -> None:
+    calls = []
+    monkeypatch.setattr(cli, "load_config", lambda path: {"config": path})
+    monkeypatch.setattr(cli.commands, "run_aliases", lambda config: calls.append(config) or 0)
+
+    assert cli.main(["aliases"]) == 0
+    assert calls == [{"config": "config.toml"}]
+
+
 def test_cli_dispatches_dense_inspection_without_mode_flags(monkeypatch) -> None:
     calls = []
     monkeypatch.setattr(cli, "load_config", lambda path: {"config": path})
@@ -46,7 +55,7 @@ def test_cli_dispatches_dense_evaluation(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(cli.commands, "run_eval", lambda config, dataset, **kwargs: calls.append((config, dataset, kwargs)) or 0)
 
     assert cli.main(["eval", str(dataset)]) == 0
-    assert calls == [({"config": "config.toml"}, dataset, {"output": None})]
+    assert calls == [({"config": "config.toml"}, dataset, {"output": None, "top_k": None})]
 
 
 def test_cli_dispatches_server_with_one_worker_configuration(monkeypatch) -> None:

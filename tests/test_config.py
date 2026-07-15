@@ -18,6 +18,12 @@ vector_size = 384
 
 [retrieval]
 top_k = 3
+alias_minimum_confidence = 0.9
+alias_minimum_tokens = 3
+preferred_document_limit = 2
+canonical_source_types = ["wiki", "handbook"]
+temporal_source_types = ["news", "forum"]
+excluded_chunk_types = ["citation"]
 """.strip(),
         encoding="utf-8",
     )
@@ -40,6 +46,12 @@ top_k = 3
     assert config.qdrant.collection == "osu_wiki_en_test"
     assert config.qdrant.vector_size == 768
     assert config.retrieval.top_k == 3
+    assert config.retrieval.alias_minimum_confidence == 0.9
+    assert config.retrieval.alias_minimum_tokens == 3
+    assert config.retrieval.preferred_document_limit == 2
+    assert config.retrieval.canonical_source_types == ("wiki", "handbook")
+    assert config.retrieval.temporal_source_types == ("news", "forum")
+    assert config.retrieval.excluded_chunk_types == ("citation",)
     assert config.generation.provider == "openai-compatible"
     assert config.generation.url == "https://models.example/v1"
     assert config.generation.model == "small-instruct"

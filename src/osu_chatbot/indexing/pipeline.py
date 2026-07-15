@@ -196,7 +196,17 @@ def ensure_qdrant_collection(client, collection: str, vector_size: int) -> None:
             collection_name=collection,
             vectors_config=models.VectorParams(size=vector_size, distance=models.Distance.COSINE),
         )
-    for field in ["source_type", "domain", "subculture", "chunk_type", "year", "series_primary", "page_id", "post_id"]:
+    for field in [
+        "document_id",
+        "source_type",
+        "domain",
+        "subculture",
+        "chunk_type",
+        "year",
+        "series_primary",
+        "page_id",
+        "post_id",
+    ]:
         try:
             client.create_payload_index(collection_name=collection, field_name=field, field_schema=models.PayloadSchemaType.KEYWORD)
         except Exception:

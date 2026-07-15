@@ -28,10 +28,16 @@ Build the new dense index remotely:
 
 ```bash
 docker compose -f deploy/compose.yaml run --rm app osu-bot ingest
+docker compose -f deploy/compose.yaml run --rm app osu-bot links
+docker compose -f deploy/compose.yaml run --rm app osu-bot aliases
 docker compose -f deploy/compose.yaml run --rm app osu-bot validate
 docker compose -f deploy/compose.yaml run --rm app osu-bot index --batch-size 32
 docker compose -f deploy/compose.yaml run --rm app osu-bot eval eval/osu_seed.jsonl
 ```
+
+`aliases` is CPU-light and does not change embeddings. After a code-only upgrade to
+the query analyzer, run `links` and `aliases`, rebuild/recreate the app container,
+and evaluate the existing collection before deciding whether to re-index.
 
 If indexing is interrupted, resume it:
 

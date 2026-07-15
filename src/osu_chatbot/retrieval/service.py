@@ -4,28 +4,49 @@ from dataclasses import dataclass
 from typing import Protocol
 
 from ..config import AppConfig
-from ..domain.models import QueryIntent, SearchResult
+from ..domain.models import SearchResult
+from .analysis import ArtifactTopicResolver, DefaultQueryAnalyzer, QueryAnalyzer
 from .dense import DenseRetriever
-from .intent import build_retrieval_query, classify_query
+from .intent import build_retrieval_query
+from .models import QueryAnalysis, RetrievalRequest
 
 
 class RetrievalBackend(Protocol):
-    def search(self, query: str, limit: int) -> list[SearchResult]: ...
+    def search(self, request: RetrievalRequest) -> list[SearchResult]: ...
 
 
 @dataclass(frozen=True)
 class RetrievalOutcome:
     results: list[SearchResult]
-    intent: QueryIntent
+    analysis: QueryAnalysis
     search_query: str
+
+    @property
+    def intent(self):
+        return self.analysis.intent
 
 
 class Retriever:
     """Understand a query, then delegate evidence lookup to one backend."""
 
-    def __init__(self, config: AppConfig, *, backend: RetrievalBackend | None = None):
+    def __init__(
+        self,
+        config: AppConfig,
+        *,
+        backend: RetrievalBackend | None = None,
+        analyzer: QueryAnalyzer | None = None,
+    ):
         self.config = config
         self.backend = backend or DenseRetriever(config)
+        if analyzer is None:
+            artifact_dir = config.artifacts.source_path or config.artifacts.path
+            resolver = ArtifactTopicResolver(
+                artifact_dir / config.retrieval.alias_artifact,
+                minimum_confidence=config.retrieval.alias_minimum_confidence,
+                minimum_tokens=config.retrieval.alias_minimum_tokens,
+            )
+            analyzer = DefaultQueryAnalyzer(resolver)
+        self.analyzer = analyzer
 
     def search(self, query: str, top_k: int | None = None) -> list[SearchResult]:
         return self.retrieve(query, top_k=top_k).results
@@ -33,17 +54,67 @@ class Retriever:
     def retrieve(self, query: str, top_k: int | None = None) -> RetrievalOutcome:
         clean_query = " ".join(query.split())
         if not clean_query:
-            return RetrievalOutcome(results=[], intent=QueryIntent(), search_query="")
+            return RetrievalOutcome(
+                results=[],
+                analysis=QueryAnalysis(query=""),
+                search_query="",
+            )
 
-        intent = classify_query(clean_query)
-        search_query = build_retrieval_query(clean_query, intent)
+        analysis = self.analyzer.analyze(clean_query)
+        search_query = build_retrieval_query(clean_query, analysis.intent)
         limit = self.config.retrieval.top_k if top_k is None else top_k
+        source_types = (
+            self.config.retrieval.temporal_source_types
+            if analysis.retrieval_lane == "temporal"
+            else self.config.retrieval.canonical_source_types
+        )
+        common_request = {
+            "query": search_query,
+            "excluded_chunk_types": self.config.retrieval.excluded_chunk_types,
+        }
+        results: list[SearchResult] = []
+        preferred_document_ids = analysis.preferred_document_ids
+        if preferred_document_ids:
+            results = self.backend.search(
+                RetrievalRequest(
+                    **common_request,
+                    limit=min(limit, self.config.retrieval.preferred_document_limit),
+                    document_ids=preferred_document_ids,
+                )
+            )
+        if len(results) < limit:
+            general_results = self.backend.search(
+                RetrievalRequest(
+                    **common_request,
+                    limit=limit,
+                    source_types=source_types,
+                )
+            )
+            results = merge_results(results, general_results, limit=limit)
         return RetrievalOutcome(
-            results=self.backend.search(search_query, limit),
-            intent=intent,
+            results=results,
+            analysis=analysis,
             search_query=search_query,
         )
 
     def is_ready(self) -> bool:
         readiness_check = getattr(self.backend, "is_ready", None)
         return True if readiness_check is None else bool(readiness_check())
+
+
+def merge_results(
+    preferred: list[SearchResult],
+    fallback: list[SearchResult],
+    *,
+    limit: int,
+) -> list[SearchResult]:
+    merged: list[SearchResult] = []
+    seen_chunk_ids: set[str] = set()
+    for result in [*preferred, *fallback]:
+        if result.chunk.id in seen_chunk_ids:
+            continue
+        seen_chunk_ids.add(result.chunk.id)
+        merged.append(result)
+        if len(merged) >= limit:
+            break
+    return merged

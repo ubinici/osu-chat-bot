@@ -21,12 +21,22 @@ class SourceCitation:
 
 
 @dataclass(frozen=True)
+class TopicMatch:
+    canonical_id: str
+    matched_alias: str
+    document_ids: list[str]
+    confidence: float
+
+
+@dataclass(frozen=True)
 class ChatResult:
     answer: str
     sources: list[SourceCitation]
     intent: list[str]
     search_query: str
     latency_ms: int
+    retrieval_lane: str = "canonical"
+    resolved_topics: list[TopicMatch] | None = None
 
 
 class ChatService:
@@ -71,6 +81,16 @@ class ChatService:
             intent=sorted(outcome.intent.labels),
             search_query=outcome.search_query,
             latency_ms=latency_ms,
+            retrieval_lane=outcome.analysis.retrieval_lane,
+            resolved_topics=[
+                TopicMatch(
+                    canonical_id=topic.canonical_id,
+                    matched_alias=topic.matched_alias,
+                    document_ids=list(topic.document_ids),
+                    confidence=round(topic.confidence, 6),
+                )
+                for topic in outcome.analysis.topics
+            ],
         )
 
     def is_ready(self) -> bool:

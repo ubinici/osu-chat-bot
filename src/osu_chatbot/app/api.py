@@ -24,12 +24,21 @@ class SourceResponse(BaseModel):
     score: float
 
 
+class TopicResponse(BaseModel):
+    canonical_id: str
+    matched_alias: str
+    document_ids: list[str]
+    confidence: float
+
+
 class ChatResponse(BaseModel):
     answer: str
     sources: list[SourceResponse]
     intent: list[str]
     search_query: str
     latency_ms: int
+    retrieval_lane: str
+    resolved_topics: list[TopicResponse]
 
 
 def create_app(
@@ -70,6 +79,8 @@ def create_app(
             intent=result.intent,
             search_query=result.search_query,
             latency_ms=result.latency_ms,
+            retrieval_lane=result.retrieval_lane,
+            resolved_topics=[TopicResponse(**vars(topic)) for topic in result.resolved_topics or []],
         )
 
     return app

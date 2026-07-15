@@ -44,6 +44,8 @@ def test_api_exposes_health_readiness_and_chat() -> None:
     body = response.json()
     assert body["answer"].endswith("[1]")
     assert body["sources"][0]["document_id"] == "Beatmap/Approach_rate"
+    assert body["retrieval_lane"] == "canonical"
+    assert body["resolved_topics"] == []
     assert body["latency_ms"] == 12
 
 
