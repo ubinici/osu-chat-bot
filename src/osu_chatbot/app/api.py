@@ -12,8 +12,14 @@ from .service import ChatService
 logger = logging.getLogger(__name__)
 
 
+class ConversationTurnRequest(BaseModel):
+    user: str = Field(min_length=1, max_length=2000)
+    assistant: str = Field(min_length=1, max_length=4000)
+
+
 class ChatRequest(BaseModel):
     question: str = Field(min_length=1, max_length=2000)
+    history: list[ConversationTurnRequest] = Field(default_factory=list, max_length=8)
 
 
 class SourceResponse(BaseModel):
@@ -76,7 +82,11 @@ def create_app(
     @app.post("/v1/chat", response_model=ChatResponse)
     async def chat(payload: ChatRequest) -> ChatResponse:
         try:
-            result = await run_in_threadpool(chat_service.ask, payload.question)
+            history = [(turn.user, turn.assistant) for turn in payload.history]
+            if history:
+                result = await run_in_threadpool(chat_service.ask, payload.question, history)
+            else:
+                result = await run_in_threadpool(chat_service.ask, payload.question)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         except Exception as exc:

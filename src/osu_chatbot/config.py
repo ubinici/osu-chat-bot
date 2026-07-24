@@ -68,6 +68,11 @@ class DiscordConfig:
     feedback_path: Path = Path("artifacts/feedback/events.jsonl")
     answer_version: str = "gpt-oss-discord-v1"
     ephemeral_answers: bool = False
+    max_active_rooms: int = 4
+    inactivity_seconds: int = 300
+    context_turns: int = 8
+    session_db_path: Path = Path("artifacts/feedback/discord_sessions.sqlite3")
+    category_id: int | None = None
 
 
 @dataclass(frozen=True)
@@ -195,6 +200,41 @@ def load_config(path: str | Path = "config.toml") -> AppConfig:
                 if "OSU_BOT_DISCORD_EPHEMERAL" in os.environ
                 else discord_data.get("ephemeral_answers", False),
                 label="discord ephemeral_answers",
+            ),
+            max_active_rooms=max(
+                1,
+                int(
+                    os.environ.get("OSU_BOT_DISCORD_MAX_ACTIVE_ROOMS")
+                    or discord_data.get("max_active_rooms", 4)
+                ),
+            ),
+            inactivity_seconds=max(
+                60,
+                int(
+                    os.environ.get("OSU_BOT_DISCORD_INACTIVITY_SECONDS")
+                    or discord_data.get("inactivity_seconds", 300)
+                ),
+            ),
+            context_turns=min(
+                8,
+                max(
+                    1,
+                    int(
+                        os.environ.get("OSU_BOT_DISCORD_CONTEXT_TURNS")
+                        or discord_data.get("context_turns", 8)
+                    ),
+                ),
+            ),
+            session_db_path=Path(
+                os.environ.get("OSU_BOT_DISCORD_SESSION_DB_PATH")
+                or discord_data.get(
+                    "session_db_path",
+                    "artifacts/feedback/discord_sessions.sqlite3",
+                )
+            ),
+            category_id=_optional_int(
+                os.environ.get("OSU_BOT_DISCORD_CATEGORY_ID")
+                or discord_data.get("category_id")
             ),
         ),
     )

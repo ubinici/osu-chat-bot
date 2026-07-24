@@ -47,6 +47,11 @@ services:
       OSU_BOT_DISCORD_FEEDBACK_PATH: /app/artifacts/feedback/events.jsonl
       OSU_BOT_DISCORD_EPHEMERAL: ${OSU_BOT_DISCORD_EPHEMERAL:-false}
       OSU_BOT_ANSWER_VERSION: ${OSU_BOT_ANSWER_VERSION:-gpt-oss-discord-v1}
+      OSU_BOT_DISCORD_MAX_ACTIVE_ROOMS: ${OSU_BOT_DISCORD_MAX_ACTIVE_ROOMS:-4}
+      OSU_BOT_DISCORD_INACTIVITY_SECONDS: ${OSU_BOT_DISCORD_INACTIVITY_SECONDS:-300}
+      OSU_BOT_DISCORD_CONTEXT_TURNS: ${OSU_BOT_DISCORD_CONTEXT_TURNS:-8}
+      OSU_BOT_DISCORD_SESSION_DB_PATH: /app/artifacts/feedback/discord_sessions.sqlite3
+      OSU_BOT_DISCORD_CATEGORY_ID: ${OSU_BOT_DISCORD_CATEGORY_ID:-}
     volumes:
       - ../artifacts:/app/artifacts
     depends_on:

@@ -52,6 +52,35 @@ def test_prompt_accepts_aggregate_style_instruction() -> None:
     assert "Keep it casual and concise." in prompt
 
 
+def test_prompt_uses_room_history_only_for_conversational_continuity() -> None:
+    result = SearchResult(
+        chunk=Chunk(
+            id="od::article",
+            document_id="Beatmap/Overall_difficulty",
+            source_type="wiki",
+            file_path="Beatmap/Overall_difficulty/en.md",
+            osu_url="https://osu.ppy.sh/wiki/en/Beatmap/Overall_difficulty",
+            title="Overall difficulty",
+            text="Overall difficulty controls hit windows.",
+            chunk_index=0,
+        ),
+        score=0.9,
+    )
+
+    prompt = build_prompt(
+        "does it affect every mode?",
+        [result],
+        history=[("what does OD do?", "It controls hit windows. [1]")],
+    )
+
+    assert "Conversation history" in prompt
+    assert "User: what does OD do?" in prompt
+    assert "Assistant: It controls hit windows. [1]" in prompt
+    assert "it is not factual evidence" in prompt
+    assert "cite only the current context" in prompt
+    assert "Current question: does it affect every mode?" in prompt
+
+
 def test_answerer_uses_injected_generator() -> None:
     class FakeGenerator:
         def __init__(self):

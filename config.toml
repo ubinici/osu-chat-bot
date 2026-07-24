@@ -42,5 +42,10 @@ max_concurrent_requests = 4
 [discord]
 api_url = "http://127.0.0.1:8000"
 feedback_path = "artifacts/feedback/events.jsonl"
+session_db_path = "artifacts/feedback/discord_sessions.sqlite3"
 answer_version = "gpt-oss-discord-v1"
 ephemeral_answers = false
+max_active_rooms = 4
+inactivity_seconds = 300
+context_turns = 8
+# category_id = 123456789012345678

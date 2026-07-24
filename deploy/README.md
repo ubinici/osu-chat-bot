@@ -78,9 +78,10 @@ Then call `http://127.0.0.1:8000` locally. Add an authenticated TLS reverse prox
 
 Create an application in the [Discord Developer Portal](https://discord.com/developers/applications),
 add a bot user, and install it into one test server with the `bot` and
-`applications.commands` scopes. Give it permission to view the test channel and send
-messages. The integration only uses slash commands, buttons, and modals, so the privileged
-Message Content intent is not required.
+`applications.commands` scopes. Give it View Channels, Send Messages, Read Message History,
+Use Application Commands, and Manage Channels permissions. Manage Channels is required to
+create and delete the private rooms. The integration only uses slash commands, buttons, and
+modals, so the privileged Message Content intent is not required.
 
 Turn on Developer Mode in Discord and copy the test server ID, then add these values to
 the ignored `deploy/.env` file:
@@ -90,10 +91,16 @@ OSU_BOT_DISCORD_TOKEN=your-bot-token
 OSU_BOT_DISCORD_GUILD_ID=your-test-server-id
 OSU_BOT_DISCORD_EPHEMERAL=false
 OSU_BOT_ANSWER_VERSION=gpt-oss-discord-v1
+OSU_BOT_DISCORD_MAX_ACTIVE_ROOMS=4
+OSU_BOT_DISCORD_INACTIVITY_SECONDS=300
+OSU_BOT_DISCORD_CONTEXT_TURNS=8
+# Optional category under which private rooms are created:
+# OSU_BOT_DISCORD_CATEGORY_ID=123456789012345678
 ```
 
-Using a guild ID makes `/ask` sync directly to the test server. If the guild ID is omitted,
-the bot registers the command globally and Discord may take longer to propagate it.
+Using a guild ID makes `/initiate`, `/ask`, and `/close` sync directly to the test server.
+If the guild ID is omitted, the bot registers the commands globally and Discord may take
+longer to propagate them.
 
 Start both serving processes and inspect their logs:
 
@@ -103,10 +110,46 @@ docker compose -f deploy/compose.yaml logs -f app discord
 ```
 
 The Discord container calls `http://app:8000/v1/chat`; it does not load a second embedding
-model. Answers include wiki links and feedback controls. Feedback is written to
-`artifacts/feedback/events.jsonl` and contains the query, retrieval metadata, rating, and
-optional correction, but no Discord user ID. Rotate the token immediately if it is ever
-printed, pasted into chat, or committed.
+model. Test the lifecycle in this order:
+
+1. Run `/initiate` in the server and open the channel returned by the bot.
+2. Confirm `/ask` is rejected in an ordinary channel.
+3. Ask two related questions in the private room and check that the second can resolve
+   references to the first.
+4. Open rooms from four test accounts, if available, and confirm the next `/initiate` is
+   refused.
+5. Run `/close`, or leave a room idle for five minutes, and confirm its channel disappears.
+
+The channel is hidden from ordinary members, not from Discord, server administrators, or
+the bot operator; the bot states this when opening a room. The full question/answer
+transcript is written incrementally and finalized in
+`artifacts/feedback/discord_sessions.sqlite3` before deletion. Incremental writes preserve
+completed turns if the process crashes. On restart, any open transcript is marked
+`bot_restart` and leftover managed channels are deleted. The database intentionally stores
+no Discord user, guild, or channel ID.
+
+Answers include wiki links and feedback controls. Feedback is written separately to
+`artifacts/feedback/events.jsonl` with the query, retrieval metadata, rating, and optional
+correction, but no Discord user ID. Rotate the token immediately if it is ever printed,
+pasted into chat, or committed.
+
+After a test run, confirm that sessions and turns were recorded:
+
+```bash
+python3 - <<'PY'
+import sqlite3
+
+db = sqlite3.connect("artifacts/feedback/discord_sessions.sqlite3")
+print(db.execute(
+    "SELECT session_id, created_at, closed_at, close_reason FROM chat_sessions "
+    "ORDER BY created_at DESC LIMIT 10"
+).fetchall())
+print(db.execute(
+    "SELECT session_id, turn_index, user_message FROM chat_turns "
+    "ORDER BY id DESC LIMIT 10"
+).fetchall())
+PY
+```
 
 ## Response style profile
 

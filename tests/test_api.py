@@ -10,11 +10,17 @@ from osu_chatbot.app.service import ChatResult, SourceCitation
 class FakeChatService:
     def __init__(self, *, ready: bool = True):
         self.ready = ready
+        self.last_history = None
 
     def is_ready(self) -> bool:
         return self.ready
 
-    def ask(self, question: str) -> ChatResult:
+    def ask(
+        self,
+        question: str,
+        history: list[tuple[str, str]] | None = None,
+    ) -> ChatResult:
+        self.last_history = history
         if not question.strip():
             raise ValueError("Question must not be blank.")
         return ChatResult(
@@ -71,6 +77,46 @@ def test_api_rejects_blank_question() -> None:
     assert response.status_code == 400
 
 
+def test_api_passes_validated_room_history_to_service() -> None:
+    service = FakeChatService()
+    client = TestClient(create_app(service=service))
+
+    response = client.post(
+        "/v1/chat",
+        json={
+            "question": "Does that affect every mode?",
+            "history": [
+                {
+                    "user": "What does OD do?",
+                    "assistant": "It changes hit windows. [1]",
+                }
+            ],
+        },
+    )
+
+    assert response.status_code == 200
+    assert service.last_history == [
+        ("What does OD do?", "It changes hit windows. [1]")
+    ]
+
+
+def test_api_rejects_more_than_eight_history_turns() -> None:
+    client = TestClient(create_app(service=FakeChatService()))
+
+    response = client.post(
+        "/v1/chat",
+        json={
+            "question": "What next?",
+            "history": [
+                {"user": f"question {index}", "assistant": f"answer {index}"}
+                for index in range(9)
+            ],
+        },
+    )
+
+    assert response.status_code == 422
+
+
 def test_async_chat_route_allows_overlapping_service_calls() -> None:
     class ConcurrentChatService(FakeChatService):
         def __init__(self):
@@ -80,13 +126,17 @@ def test_async_chat_route_allows_overlapping_service_calls() -> None:
             self.active = 0
             self.peak = 0
 
-        def ask(self, question: str) -> ChatResult:
+        def ask(
+            self,
+            question: str,
+            history: list[tuple[str, str]] | None = None,
+        ) -> ChatResult:
             with self.lock:
                 self.active += 1
                 self.peak = max(self.peak, self.active)
             try:
                 self.barrier.wait()
-                return super().ask(question)
+                return super().ask(question, history)
             finally:
                 with self.lock:
                     self.active -= 1

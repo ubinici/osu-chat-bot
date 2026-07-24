@@ -13,8 +13,11 @@ def answer_question(
     generator: TextGenerator,
     *,
     style: str | None = None,
+    history: list[tuple[str, str]] | None = None,
 ) -> str:
     if not results:
         return INSUFFICIENT_CONTEXT
-    answer = generator.generate(build_prompt(question, results, style=style))
+    answer = generator.generate(
+        build_prompt(question, results, style=style, history=history)
+    )
     return answer or INSUFFICIENT_CONTEXT

@@ -38,6 +38,8 @@ def test_chat_service_runs_complete_cited_pipeline() -> None:
     class FakeGenerator:
         def generate(self, prompt: str):
             assert "Approach rate controls" in prompt
+            assert "User: what does OD do?" in prompt
+            assert "Assistant: It changes hit windows. [1]" in prompt
             return "AR changes how long objects are visible. [1]"
 
     service = ChatService(
@@ -46,7 +48,10 @@ def test_chat_service_runs_complete_cited_pipeline() -> None:
         generator=FakeGenerator(),
     )
 
-    response = service.ask("  what does AR do?  ")
+    response = service.ask(
+        "  what does AR do?  ",
+        history=[("  what does OD do?  ", "  It changes hit windows. [1]  ")],
+    )
 
     assert response.answer.endswith("[1]")
     assert response.intent == ["definition"]

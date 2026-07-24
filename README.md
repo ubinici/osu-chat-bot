@@ -57,8 +57,12 @@ set OSU_BOT_DISCORD_GUILD_ID=your-test-server-id
 osu-bot discord
 ```
 
-The bot provides `/ask` plus Helpful, Wrong answer, and Wrong source feedback controls.
-Feedback is appended to `artifacts/feedback/events.jsonl` without storing Discord user IDs.
+Use `/initiate` in a server to create a private room, `/ask` inside that room, and `/close`
+to finish early. The bot accepts questions only from the room owner, caps the number of
+active rooms, and removes idle rooms after five minutes by default. Each room gets isolated,
+bounded conversation context. Finalized transcripts are stored in
+`artifacts/feedback/discord_sessions.sqlite3`; feedback is appended to
+`artifacts/feedback/events.jsonl`. Neither store contains Discord user IDs.
 
 ## Commands
 
@@ -71,7 +75,7 @@ Feedback is appended to `artifacts/feedback/events.jsonl` without storing Discor
 - `eval`: measure document/chunk retrieval against a JSONL evaluation set.
 - `query`: retrieve evidence and ask the configured generator for a cited answer.
 - `serve`: run the minimal HTTP chat API with one inference worker.
-- `discord`: run the Discord `/ask` client against the HTTP API.
+- `discord`: run the Discord private-room client against the HTTP API.
 - `build-style-profile`: reduce a JSONL chat export to aggregate style statistics.
 
 Additional `terms`, `entities`, `normalize-entities`, and `stats` commands are offline corpus-analysis utilities. They are not required by the serving path.
@@ -129,6 +133,11 @@ The Qdrant URL can point to embedded storage or a remote service. Environment va
 - `OSU_BOT_DISCORD_FEEDBACK_PATH`
 - `OSU_BOT_DISCORD_EPHEMERAL`
 - `OSU_BOT_ANSWER_VERSION`
+- `OSU_BOT_DISCORD_MAX_ACTIVE_ROOMS`
+- `OSU_BOT_DISCORD_INACTIVITY_SECONDS`
+- `OSU_BOT_DISCORD_CONTEXT_TURNS`
+- `OSU_BOT_DISCORD_SESSION_DB_PATH`
+- `OSU_BOT_DISCORD_CATEGORY_ID`
 
 Supported generation providers are `ollama` and `openai-compatible`. For the latter, configure the base URL through `/v1`; the adapter calls its `/chat/completions` endpoint.
 

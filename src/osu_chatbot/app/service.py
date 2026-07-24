@@ -64,10 +64,15 @@ class ChatService:
         self.style_instruction = load_style_instruction(config.generation.style_profile_path)
         self._inference_slots = BoundedSemaphore(config.generation.max_concurrent_requests)
 
-    def ask(self, question: str) -> ChatResult:
+    def ask(
+        self,
+        question: str,
+        history: list[tuple[str, str]] | None = None,
+    ) -> ChatResult:
         clean_question = " ".join(question.split())
         if not clean_question:
             raise ValueError("Question must not be blank.")
+        clean_history = _clean_history(history or [])
 
         started = perf_counter()
         with self._inference_slots:
@@ -79,6 +84,7 @@ class ChatService:
                     outcome.results,
                     self.generator,
                     style=self.style_instruction,
+                    history=clean_history,
                 )
             else:
                 answer = clarification_request.prompt
@@ -125,3 +131,19 @@ class ChatService:
 
     def is_ready(self) -> bool:
         return self.retriever.is_ready()
+
+
+def _clean_history(history: list[tuple[str, str]]) -> list[tuple[str, str]]:
+    newest_first: list[tuple[str, str]] = []
+    total_characters = 0
+    for user, assistant in reversed(history[-8:]):
+        clean_user = " ".join(str(user).split())[:2000]
+        clean_assistant = " ".join(str(assistant).split())[:4000]
+        if not clean_user or not clean_assistant:
+            continue
+        turn_characters = len(clean_user) + len(clean_assistant)
+        if total_characters + turn_characters > 12000:
+            break
+        total_characters += turn_characters
+        newest_first.append((clean_user, clean_assistant))
+    return list(reversed(newest_first))

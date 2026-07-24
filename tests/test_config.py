@@ -45,6 +45,14 @@ excluded_chunk_types = ["citation"]
     monkeypatch.setenv("OSU_BOT_DISCORD_GUILD_ID", "12345")
     monkeypatch.setenv("OSU_BOT_DISCORD_FEEDBACK_PATH", "artifacts/feedback/discord.jsonl")
     monkeypatch.setenv("OSU_BOT_DISCORD_EPHEMERAL", "true")
+    monkeypatch.setenv("OSU_BOT_DISCORD_MAX_ACTIVE_ROOMS", "6")
+    monkeypatch.setenv("OSU_BOT_DISCORD_INACTIVITY_SECONDS", "420")
+    monkeypatch.setenv("OSU_BOT_DISCORD_CONTEXT_TURNS", "5")
+    monkeypatch.setenv(
+        "OSU_BOT_DISCORD_SESSION_DB_PATH",
+        "artifacts/feedback/sessions.sqlite3",
+    )
+    monkeypatch.setenv("OSU_BOT_DISCORD_CATEGORY_ID", "67890")
 
     config = load_config(config_path)
 
@@ -73,3 +81,8 @@ excluded_chunk_types = ["citation"]
     assert config.discord.guild_id == 12345
     assert config.discord.feedback_path == Path("artifacts/feedback/discord.jsonl")
     assert config.discord.ephemeral_answers is True
+    assert config.discord.max_active_rooms == 6
+    assert config.discord.inactivity_seconds == 420
+    assert config.discord.context_turns == 5
+    assert config.discord.session_db_path == Path("artifacts/feedback/sessions.sqlite3")
+    assert config.discord.category_id == 67890
