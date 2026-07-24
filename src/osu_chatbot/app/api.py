@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 
 from fastapi import FastAPI, HTTPException
+from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, Field
 
 from ..config import AppConfig, load_config
@@ -73,9 +74,9 @@ def create_app(
         return {"status": "ready"}
 
     @app.post("/v1/chat", response_model=ChatResponse)
-    def chat(payload: ChatRequest) -> ChatResponse:
+    async def chat(payload: ChatRequest) -> ChatResponse:
         try:
-            result = chat_service.ask(payload.question)
+            result = await run_in_threadpool(chat_service.ask, payload.question)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
         except Exception as exc:

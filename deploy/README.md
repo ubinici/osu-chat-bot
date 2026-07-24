@@ -1,10 +1,10 @@
 # CPU Droplet deployment
 
-This is a single-host MVP stack: one chatbot process, one Qdrant node, and one CPU-only Ollama process. It is meant for real-world testing, not high availability.
+This is a single-host closed-beta stack: one FastAPI RAG process, one lightweight Discord process, and one Qdrant node. Generation runs through GPT-OSS on Ollama Cloud. It is meant for real-world testing, not high availability.
 
 ## Droplet
 
-Start with at least 8 GB RAM. The documented `qwen3:4b` Ollama artifact is about 2.5 GB, and the embedding model, Qdrant, operating system, and indexing process need additional headroom. Prefer a dedicated-CPU plan if sustained generation latency matters; resize after measuring rather than guessing.
+Size the Droplet for the embedding model, Qdrant, and indexing workload; model generation no longer consumes local RAM because it runs on Ollama Cloud. Resize after measuring peak memory and request latency rather than guessing.
 
 Use an Ubuntu CPU Droplet with SSH keys and DigitalOcean monitoring enabled. Apply a Cloud Firewall that permits SSH only. The Compose file binds the API to `127.0.0.1`, and it does not publish Qdrant or Ollama.
 
@@ -20,8 +20,18 @@ git clone --depth 1 https://github.com/ppy/osu-wiki.git database/osu-wiki
 mkdir -p artifacts
 sudo chown -R 1000:1000 artifacts
 docker compose -f deploy/compose.yaml build app
-docker compose -f deploy/compose.yaml up -d qdrant ollama
-docker compose -f deploy/compose.yaml exec ollama ollama pull qwen3:4b
+docker compose -f deploy/compose.yaml up -d qdrant
+```
+
+Before starting the API, set the Ollama Cloud key in the ignored `deploy/.env` file:
+
+```dotenv
+OSU_BOT_GENERATION_PROVIDER=ollama
+OSU_BOT_GENERATION_URL=https://ollama.com
+OSU_BOT_GENERATION_MODEL=gpt-oss:20b
+OSU_BOT_GENERATION_API_KEY=your-secret
+OSU_BOT_GENERATION_THINK=low
+OSU_BOT_MAX_CONCURRENT_REQUESTS=4
 ```
 
 Build the new dense index remotely:
@@ -64,6 +74,62 @@ ssh -L 8000:127.0.0.1:8000 your-user@your-droplet
 
 Then call `http://127.0.0.1:8000` locally. Add an authenticated TLS reverse proxy before exposing the API publicly.
 
+## Discord closed beta
+
+Create an application in the [Discord Developer Portal](https://discord.com/developers/applications),
+add a bot user, and install it into one test server with the `bot` and
+`applications.commands` scopes. Give it permission to view the test channel and send
+messages. The integration only uses slash commands, buttons, and modals, so the privileged
+Message Content intent is not required.
+
+Turn on Developer Mode in Discord and copy the test server ID, then add these values to
+the ignored `deploy/.env` file:
+
+```dotenv
+OSU_BOT_DISCORD_TOKEN=your-bot-token
+OSU_BOT_DISCORD_GUILD_ID=your-test-server-id
+OSU_BOT_DISCORD_EPHEMERAL=false
+OSU_BOT_ANSWER_VERSION=gpt-oss-discord-v1
+```
+
+Using a guild ID makes `/ask` sync directly to the test server. If the guild ID is omitted,
+the bot registers the command globally and Discord may take longer to propagate it.
+
+Start both serving processes and inspect their logs:
+
+```bash
+docker compose -f deploy/compose.yaml up -d app discord
+docker compose -f deploy/compose.yaml logs -f app discord
+```
+
+The Discord container calls `http://app:8000/v1/chat`; it does not load a second embedding
+model. Answers include wiki links and feedback controls. Feedback is written to
+`artifacts/feedback/events.jsonl` and contains the query, retrieval metadata, rating, and
+optional correction, but no Discord user ID. Rotate the token immediately if it is ever
+printed, pasted into chat, or committed.
+
+## Response style profile
+
+Build the style profile offline from a JSONL export with one message object per line and a
+`content` field. Use chat data you are permitted to process and do not copy the raw export
+onto the server:
+
+```bash
+osu-bot build-style-profile private/chat.jsonl \
+  --output artifacts/style/osu_chat_style.json \
+  --minimum-messages 100
+```
+
+The output stores aggregate ratios only—no quotes, usernames, IDs, or extracted n-grams.
+Copy that small JSON artifact to the server, then set:
+
+```dotenv
+OSU_BOT_STYLE_PROFILE_PATH=/app/artifacts/style/osu_chat_style.json
+```
+
+Recreate the app container after changing the profile. The profile adjusts soft tone
+tendencies while the grounding and citation rules remain authoritative.
+
 ## Hugging Face authentication
 
 The public embedding model can be downloaded anonymously, but authenticated Hub
@@ -77,20 +143,11 @@ HF_TOKEN=hf_your_token
 Recreate the app container after adding or rotating the token. Compose also passes
 it to one-off `app` commands used for indexing. Never commit the token.
 
-## Provider switch
+## Provider configuration
 
-To call Ollama Cloud directly, change `deploy/.env`:
-
-```dotenv
-OSU_BOT_GENERATION_PROVIDER=ollama
-OSU_BOT_GENERATION_URL=https://ollama.com
-OSU_BOT_GENERATION_MODEL=gpt-oss:20b
-OSU_BOT_GENERATION_API_KEY=your-secret
-OSU_BOT_GENERATION_THINK=low
-```
-
-The HTTPS scheme is required. GPT-OSS accepts `low`, `medium`, or `high` for
-thinking; other Ollama models can normally use `false`.
+The HTTPS scheme is required for Ollama Cloud. GPT-OSS accepts `low`, `medium`, or
+`high` for thinking. `OSU_BOT_MAX_CONCURRENT_REQUESTS` bounds concurrent calls made
+by the async FastAPI route; start at 4 and adjust from observed latency and provider limits.
 
 To use a separate OpenAI-compatible endpoint instead, change `deploy/.env`:
 
@@ -101,7 +158,7 @@ OSU_BOT_GENERATION_MODEL=your-model
 OSU_BOT_GENERATION_API_KEY=your-secret
 ```
 
-Restart only the app after changing generation settings:
+Restart the app after changing generation settings:
 
 ```bash
 docker compose -f deploy/compose.yaml up -d --force-recreate app
@@ -120,7 +177,8 @@ Before the credits expire, export the Qdrant collection, copy evaluation reports
 - [DigitalOcean CPU Droplet plan guidance](https://docs.digitalocean.com/products/droplets/concepts/choosing-a-plan/)
 - [DigitalOcean Cloud Firewalls](https://docs.digitalocean.com/products/networking/firewalls/how-to/create/)
 - [DigitalOcean monitoring agent](https://docs.digitalocean.com/products/monitoring/how-to/install-metrics-agent/)
-- [Ollama CPU-only Docker setup](https://docs.ollama.com/docker)
-- [Ollama qwen3:4b model details](https://ollama.com/library/qwen3:4b)
+- [Discord interactions overview](https://docs.discord.com/developers/interactions/overview)
+- [Discord application commands](https://docs.discord.com/developers/interactions/application-commands)
+- [discord.py interactions API](https://discordpy.readthedocs.io/en/stable/interactions/api.html)
 - [Qdrant installation and storage guidance](https://qdrant.tech/documentation/installation/)
 - [Qdrant network security guidance](https://qdrant.tech/documentation/security/)

@@ -32,6 +32,26 @@ def test_prompt_requests_grounded_conversational_answer_with_citations() -> None
     assert result.chunk.osu_url in prompt
 
 
+def test_prompt_accepts_aggregate_style_instruction() -> None:
+    result = SearchResult(
+        chunk=Chunk(
+            id="ar::article",
+            document_id="Beatmap/Approach_rate",
+            source_type="wiki",
+            file_path="Beatmap/Approach_rate/en.md",
+            osu_url="https://osu.ppy.sh/wiki/en/Beatmap/Approach_rate",
+            title="Approach rate",
+            text="Approach rate controls how long hit objects are visible.",
+            chunk_index=0,
+        ),
+        score=0.9,
+    )
+
+    prompt = build_prompt("what does AR do?", [result], style="Keep it casual and concise.")
+
+    assert "Keep it casual and concise." in prompt
+
+
 def test_answerer_uses_injected_generator() -> None:
     class FakeGenerator:
         def __init__(self):
@@ -101,7 +121,7 @@ def test_openai_compatible_generator_sends_chat_completion(monkeypatch) -> None:
     assert captured["payload"]["model"] == "small-instruct"
 
 
-def test_ollama_generator_disables_thinking_for_cpu_latency(monkeypatch) -> None:
+def test_ollama_generator_supports_non_thinking_local_models(monkeypatch) -> None:
     captured = {}
 
     def fake_post_json(url, payload, **kwargs):
@@ -109,7 +129,7 @@ def test_ollama_generator_disables_thinking_for_cpu_latency(monkeypatch) -> None
         return {"response": "Grounded answer. [1]"}
 
     monkeypatch.setattr("osu_chatbot.generation.ollama.post_json", fake_post_json)
-    config = GenerationConfig(provider="ollama", model="qwen3:4b")
+    config = GenerationConfig(provider="ollama", model="mistral")
 
     answer = OllamaGenerator(config).generate("prompt")
 

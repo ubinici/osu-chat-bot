@@ -1,3 +1,6 @@
+from concurrent.futures import ThreadPoolExecutor
+from threading import Barrier, Lock
+
 from fastapi.testclient import TestClient
 
 from osu_chatbot.app.api import create_app
@@ -66,3 +69,38 @@ def test_api_rejects_blank_question() -> None:
     response = client.post("/v1/chat", json={"question": "   "})
 
     assert response.status_code == 400
+
+
+def test_async_chat_route_allows_overlapping_service_calls() -> None:
+    class ConcurrentChatService(FakeChatService):
+        def __init__(self):
+            super().__init__()
+            self.barrier = Barrier(2, timeout=2)
+            self.lock = Lock()
+            self.active = 0
+            self.peak = 0
+
+        def ask(self, question: str) -> ChatResult:
+            with self.lock:
+                self.active += 1
+                self.peak = max(self.peak, self.active)
+            try:
+                self.barrier.wait()
+                return super().ask(question)
+            finally:
+                with self.lock:
+                    self.active -= 1
+
+    service = ConcurrentChatService()
+    client = TestClient(create_app(service=service))
+
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        responses = list(
+            pool.map(
+                lambda question: client.post("/v1/chat", json={"question": question}),
+                ["What does AR do?", "What does OD do?"],
+            )
+        )
+
+    assert [response.status_code for response in responses] == [200, 200]
+    assert service.peak == 2

@@ -31,7 +31,16 @@ excluded_chunk_types = ["citation", "formula"]
 
 [generation]
 provider = "ollama"
-url = "http://127.0.0.1:11434"
-model = "mistral"
+url = "https://ollama.com"
+model = "gpt-oss:20b"
+think = "low"
 temperature = 0.1
 timeout_seconds = 120
+# style_profile_path = "artifacts/style/osu_chat_style.json"
+max_concurrent_requests = 4
+
+[discord]
+api_url = "http://127.0.0.1:8000"
+feedback_path = "artifacts/feedback/events.jsonl"
+answer_version = "gpt-oss-discord-v1"
+ephemeral_answers = false

@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from threading import Lock
+from threading import BoundedSemaphore
 from time import perf_counter
 
 from ..config import AppConfig
 from ..generation import TextGenerator, create_generator
 from ..generation.answerer import answer_question
+from ..generation.style import load_style_instruction
 from ..retrieval.service import Retriever
 
 
@@ -49,7 +50,7 @@ class ChatResult:
 
 
 class ChatService:
-    """Compose retrieval and generation while limiting CPU inference concurrency."""
+    """Compose retrieval and generation with bounded request concurrency."""
 
     def __init__(
         self,
@@ -60,7 +61,8 @@ class ChatService:
     ):
         self.retriever = retriever or Retriever(config)
         self.generator = generator or create_generator(config.generation)
-        self._inference_lock = Lock()
+        self.style_instruction = load_style_instruction(config.generation.style_profile_path)
+        self._inference_slots = BoundedSemaphore(config.generation.max_concurrent_requests)
 
     def ask(self, question: str) -> ChatResult:
         clean_question = " ".join(question.split())
@@ -68,11 +70,16 @@ class ChatService:
             raise ValueError("Question must not be blank.")
 
         started = perf_counter()
-        with self._inference_lock:
+        with self._inference_slots:
             outcome = self.retriever.retrieve(clean_question)
             clarification_request = outcome.analysis.clarification
             if clarification_request is None:
-                answer = answer_question(clean_question, outcome.results, self.generator)
+                answer = answer_question(
+                    clean_question,
+                    outcome.results,
+                    self.generator,
+                    style=self.style_instruction,
+                )
             else:
                 answer = clarification_request.prompt
         latency_ms = round((perf_counter() - started) * 1000)

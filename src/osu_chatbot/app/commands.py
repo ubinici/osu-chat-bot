@@ -24,6 +24,7 @@ from ..domain.artifacts import (
     write_jsonl,
 )
 from ..evaluation.runner import run_evaluation
+from ..generation.style import build_style_profile_artifact
 from ..indexing.pipeline import IndexOptions, build_index
 from ..knowledge.links import build_link_artifacts
 from ..knowledge.aliases import build_document_aliases
@@ -260,6 +261,31 @@ def run_server(config: AppConfig, *, host: str, port: int) -> int:
     from .api import create_app
 
     uvicorn.run(create_app(config), host=host, port=port, workers=1)
+    return 0
+
+
+def run_discord(config: AppConfig) -> int:
+    from ..integrations.discord_bot import run_discord_bot
+
+    return run_discord_bot(config.discord)
+
+
+def run_build_style_profile(
+    dataset: Path,
+    *,
+    output: Path,
+    text_field: str,
+    minimum_messages: int,
+) -> int:
+    profile = build_style_profile_artifact(
+        dataset,
+        output,
+        text_field=text_field,
+        minimum_messages=max(1, minimum_messages),
+    )
+    print(f"Messages profiled: {profile.message_count}")
+    print(f"Average words per message: {profile.average_words_per_message:.2f}")
+    print(f"Aggregate profile: {output}")
     return 0
 
 

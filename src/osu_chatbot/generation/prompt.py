@@ -3,7 +3,12 @@ from __future__ import annotations
 from ..domain.models import SearchResult
 
 
-def build_prompt(question: str, results: list[SearchResult]) -> str:
+def build_prompt(
+    question: str,
+    results: list[SearchResult],
+    *,
+    style: str | None = None,
+) -> str:
     context_parts = []
     for index, result in enumerate(results, start=1):
         chunk = result.chunk
@@ -16,8 +21,8 @@ def build_prompt(question: str, results: list[SearchResult]) -> str:
 
     context = "\n\n---\n\n".join(context_parts)
     return (
-        "You are a friendly osu! assistant. Answer in a clear, natural, conversational tone "
-        "that matches the user's level of formality without forcing slang.\n"
+        "You are a friendly osu! assistant. Answer in a clear, natural, conversational tone.\n"
+        f"{style or 'Match the user formality without forcing slang.'}\n"
         "Use only the cited osu! wiki/news context below.\n"
         "If the context does not support the answer, say that the provided osu! wiki/news context is insufficient.\n"
         "Cite every factual claim with bracket citations like [1] or [2]. Do not cite sources that do not support the claim.\n\n"

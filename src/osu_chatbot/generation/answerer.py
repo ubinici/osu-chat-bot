@@ -7,8 +7,14 @@ from .prompt import build_prompt
 INSUFFICIENT_CONTEXT = "I do not have enough supported osu! wiki/news context to answer that accurately."
 
 
-def answer_question(question: str, results: list[SearchResult], generator: TextGenerator) -> str:
+def answer_question(
+    question: str,
+    results: list[SearchResult],
+    generator: TextGenerator,
+    *,
+    style: str | None = None,
+) -> str:
     if not results:
         return INSUFFICIENT_CONTEXT
-    answer = generator.generate(build_prompt(question, results))
+    answer = generator.generate(build_prompt(question, results, style=style))
     return answer or INSUFFICIENT_CONTEXT

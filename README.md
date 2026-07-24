@@ -8,7 +8,7 @@ The current corpus is the English osu! wiki and osu! news archive. Corpus adapte
 
 ```text
 offline: source adapters -> normalized documents + aliases -> embedding-sized chunks -> Qdrant
-online:  query -> query analysis -> retrieval policy -> dense retrieval -> grounded answer with citations
+online:  Discord/API -> FastAPI -> query analysis -> retrieval -> GPT-OSS -> cited answer
 ```
 
 The serving path deliberately uses one retrieval strategy. Qdrant stores the complete chunk payload, so querying does not load the large document and chunk JSONL artifacts into application memory.
@@ -27,11 +27,13 @@ osu-bot index
 osu-bot inspect "What does AR change?"
 ```
 
-Generation defaults to Ollama:
+Generation uses the Ollama API. The deployed stack is configured for GPT-OSS through Ollama Cloud:
 
 ```powershell
-ollama pull mistral
-ollama serve
+set OSU_BOT_GENERATION_URL=https://ollama.com
+set OSU_BOT_GENERATION_MODEL=gpt-oss:20b
+set OSU_BOT_GENERATION_API_KEY=your-secret
+set OSU_BOT_GENERATION_THINK=low
 osu-bot query "What is osu!direct?"
 ```
 
@@ -42,6 +44,21 @@ osu-bot serve
 ```
 
 It exposes `GET /healthz`, `GET /readyz`, and `POST /v1/chat`.
+The chat route is async and offloads the blocking RAG call from the event loop. Set
+`OSU_BOT_MAX_CONCURRENT_REQUESTS` to bound concurrent model calls; the cloud deployment
+starts at `4`, while a local CPU model should usually start at `1`.
+
+Run the Discord slash-command client against that API:
+
+```powershell
+python -m pip install -e ".[discord]"
+set OSU_BOT_DISCORD_TOKEN=your-bot-token
+set OSU_BOT_DISCORD_GUILD_ID=your-test-server-id
+osu-bot discord
+```
+
+The bot provides `/ask` plus Helpful, Wrong answer, and Wrong source feedback controls.
+Feedback is appended to `artifacts/feedback/events.jsonl` without storing Discord user IDs.
 
 ## Commands
 
@@ -54,6 +71,8 @@ It exposes `GET /healthz`, `GET /readyz`, and `POST /v1/chat`.
 - `eval`: measure document/chunk retrieval against a JSONL evaluation set.
 - `query`: retrieve evidence and ask the configured generator for a cited answer.
 - `serve`: run the minimal HTTP chat API with one inference worker.
+- `discord`: run the Discord `/ask` client against the HTTP API.
+- `build-style-profile`: reduce a JSONL chat export to aggregate style statistics.
 
 Additional `terms`, `entities`, `normalize-entities`, and `stats` commands are offline corpus-analysis utilities. They are not required by the serving path.
 
@@ -83,8 +102,10 @@ excluded_chunk_types = ["citation", "formula"]
 
 [generation]
 provider = "ollama"
-url = "http://127.0.0.1:11434"
-model = "mistral"
+url = "https://ollama.com"
+model = "gpt-oss:20b"
+think = "low"
+max_concurrent_requests = 4
 ```
 
 The Qdrant URL can point to embedded storage or a remote service. Environment variables can override deployment-sensitive paths:
@@ -100,6 +121,14 @@ The Qdrant URL can point to embedded storage or a remote service. Environment va
 - `OSU_BOT_GENERATION_API_KEY`
 - `OSU_BOT_GENERATION_TEMPERATURE`
 - `OSU_BOT_GENERATION_TIMEOUT_SECONDS`
+- `OSU_BOT_MAX_CONCURRENT_REQUESTS`
+- `OSU_BOT_STYLE_PROFILE_PATH`
+- `OSU_BOT_DISCORD_TOKEN`
+- `OSU_BOT_DISCORD_API_URL`
+- `OSU_BOT_DISCORD_GUILD_ID`
+- `OSU_BOT_DISCORD_FEEDBACK_PATH`
+- `OSU_BOT_DISCORD_EPHEMERAL`
+- `OSU_BOT_ANSWER_VERSION`
 
 Supported generation providers are `ollama` and `openai-compatible`. For the latter, configure the base URL through `/v1`; the adapter calls its `/chat/completions` endpoint.
 
@@ -144,6 +173,24 @@ osu-bot eval-topic-model training/query_topics_seed.jsonl `
 ```
 
 The chat response also has an explicit `response_type`. Very small, high-confidence cases of missing context return `clarification` with a structured prompt and options, without calling retrieval or generation.
+
+## Aggregate response style
+
+The default prompt now aims for a casual, concise, friendly osu! voice without forcing slang.
+You can derive soft style tendencies from a JSONL chat export whose message field is `content`:
+
+```powershell
+osu-bot build-style-profile private/chat.jsonl `
+  --output artifacts/style/osu_chat_style.json `
+  --minimum-messages 100
+set OSU_BOT_STYLE_PROFILE_PATH=artifacts/style/osu_chat_style.json
+```
+
+The generated artifact contains only counts and ratios: message length, punctuation,
+lowercase usage, emoticon usage, and frequencies for a small predefined marker list. It
+does not retain quotes, n-grams, usernames, or user IDs, and the prompt treats the result
+as a soft tendency rather than an instruction to imitate an individual. Only process chat
+data you are permitted to use; keep raw exports out of the repository.
 
 Reports include Hit@1, Hit@3, Hit@6, mean reciprocal rank, resolved topics, and retrieval lanes. Expectations use actual corpus document IDs so the metric describes retrieval behavior without hidden topic-routing equivalences.
 

@@ -19,6 +19,9 @@ dev = [
 entities = [
     "gliner>=0.2.0",
 ]
+discord = [
+    "discord.py>=2.7.0,<3.0.0",
+]
 
 [project.scripts]
 osu-bot = "osu_chatbot.app.cli:main"

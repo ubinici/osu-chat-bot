@@ -56,6 +56,18 @@ class GenerationConfig:
     think: bool | str = False
     temperature: float = 0.1
     timeout_seconds: float = 120.0
+    style_profile_path: Path | None = None
+    max_concurrent_requests: int = 1
+
+
+@dataclass(frozen=True)
+class DiscordConfig:
+    token: str | None = None
+    api_url: str = "http://127.0.0.1:8000"
+    guild_id: int | None = None
+    feedback_path: Path = Path("artifacts/feedback/events.jsonl")
+    answer_version: str = "gpt-oss-discord-v1"
+    ephemeral_answers: bool = False
 
 
 @dataclass(frozen=True)
@@ -66,6 +78,7 @@ class AppConfig:
     qdrant: QdrantConfig = QdrantConfig()
     retrieval: RetrievalConfig = RetrievalConfig()
     generation: GenerationConfig = GenerationConfig()
+    discord: DiscordConfig = DiscordConfig()
 
 
 def load_config(path: str | Path = "config.toml") -> AppConfig:
@@ -77,6 +90,7 @@ def load_config(path: str | Path = "config.toml") -> AppConfig:
     qdrant_data = data.get("qdrant", {})
     retrieval_data = data.get("retrieval", {})
     generation_data = data.get("generation", {})
+    discord_data = data.get("discord", {})
     if not generation_data and data.get("ollama"):
         generation_data = {"provider": "ollama", **data["ollama"]}
     return AppConfig(
@@ -146,6 +160,42 @@ def load_config(path: str | Path = "config.toml") -> AppConfig:
                 os.environ.get("OSU_BOT_GENERATION_TIMEOUT_SECONDS")
                 or generation_data.get("timeout_seconds", 120.0)
             ),
+            style_profile_path=_optional_path(
+                os.environ.get("OSU_BOT_STYLE_PROFILE_PATH")
+                or generation_data.get("style_profile_path")
+            ),
+            max_concurrent_requests=max(
+                1,
+                int(
+                    os.environ.get("OSU_BOT_MAX_CONCURRENT_REQUESTS")
+                    or generation_data.get("max_concurrent_requests", 1)
+                ),
+            ),
+        ),
+        discord=DiscordConfig(
+            token=os.environ.get("OSU_BOT_DISCORD_TOKEN") or discord_data.get("token"),
+            api_url=(
+                os.environ.get("OSU_BOT_DISCORD_API_URL")
+                or discord_data.get("api_url", "http://127.0.0.1:8000")
+            ).rstrip("/"),
+            guild_id=_optional_int(
+                os.environ.get("OSU_BOT_DISCORD_GUILD_ID")
+                or discord_data.get("guild_id")
+            ),
+            feedback_path=Path(
+                os.environ.get("OSU_BOT_DISCORD_FEEDBACK_PATH")
+                or discord_data.get("feedback_path", "artifacts/feedback/events.jsonl")
+            ),
+            answer_version=str(
+                os.environ.get("OSU_BOT_ANSWER_VERSION")
+                or discord_data.get("answer_version", "gpt-oss-discord-v1")
+            ).strip(),
+            ephemeral_answers=_parse_bool(
+                os.environ.get("OSU_BOT_DISCORD_EPHEMERAL")
+                if "OSU_BOT_DISCORD_EPHEMERAL" in os.environ
+                else discord_data.get("ephemeral_answers", False),
+                label="discord ephemeral_answers",
+            ),
         ),
     )
 
@@ -161,6 +211,32 @@ def _parse_think(value: object) -> bool | str:
     if normalized in {"", "0", "false", "no", "off"}:
         return False
     raise ValueError("generation think must be true, false, low, medium, or high")
+
+
+def _parse_bool(value: object, *, label: str) -> bool:
+    if isinstance(value, bool):
+        return value
+    normalized = str(value).strip().casefold()
+    if normalized in {"1", "true", "yes", "on"}:
+        return True
+    if normalized in {"", "0", "false", "no", "off"}:
+        return False
+    raise ValueError(f"{label} must be true or false")
+
+
+def _optional_int(value: object) -> int | None:
+    if value is None or not str(value).strip():
+        return None
+    parsed = int(value)
+    if parsed <= 0:
+        raise ValueError("discord guild_id must be a positive integer")
+    return parsed
+
+
+def _optional_path(value: object) -> Path | None:
+    if value is None or not str(value).strip():
+        return None
+    return Path(str(value).strip())
 
 
 def _string_tuple(value: object, default: tuple[str, ...]) -> tuple[str, ...]:

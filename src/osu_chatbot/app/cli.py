@@ -64,6 +64,22 @@ def main(argv: list[str] | None = None) -> int:
     serve_parser.add_argument("--host", default="127.0.0.1")
     serve_parser.add_argument("--port", type=int, default=8000)
 
+    subparsers.add_parser("discord", help="Run the Discord slash-command client")
+
+    style_parser = subparsers.add_parser(
+        "build-style-profile",
+        help="Build a privacy-preserving aggregate style profile from chat JSONL",
+    )
+    style_parser.add_argument("dataset", type=Path, help="JSONL chat export")
+    style_parser.add_argument("--output", type=Path, required=True, help="Aggregate JSON profile")
+    style_parser.add_argument("--text-field", default="content", help="JSON field containing message text")
+    style_parser.add_argument(
+        "--minimum-messages",
+        type=int,
+        default=100,
+        help="Minimum non-empty messages required to create a profile",
+    )
+
     eval_parser = subparsers.add_parser("eval", help="Run retrieval evaluation from a JSONL dataset")
     eval_parser.add_argument("dataset", type=Path)
     eval_parser.add_argument("--output", type=Path, help="Optional JSON report path")
@@ -138,6 +154,15 @@ def main(argv: list[str] | None = None) -> int:
             return commands.run_query(config, args.question)
         if args.command == "serve":
             return commands.run_server(config, host=args.host, port=args.port)
+        if args.command == "discord":
+            return commands.run_discord(config)
+        if args.command == "build-style-profile":
+            return commands.run_build_style_profile(
+                args.dataset,
+                output=args.output,
+                text_field=args.text_field,
+                minimum_messages=args.minimum_messages,
+            )
         if args.command == "eval":
             return commands.run_eval(config, args.dataset, output=args.output, top_k=args.top_k)
         if args.command == "build-topic-dataset":

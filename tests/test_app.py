@@ -127,3 +127,38 @@ def test_cli_dispatches_server_with_one_worker_configuration(monkeypatch) -> Non
 
     assert cli.main(["serve", "--host", "0.0.0.0", "--port", "9000"]) == 0
     assert calls == [({"config": "config.toml"}, {"host": "0.0.0.0", "port": 9000})]
+
+
+def test_cli_dispatches_discord_client(monkeypatch) -> None:
+    calls = []
+    monkeypatch.setattr(cli, "load_config", lambda path: {"config": path})
+    monkeypatch.setattr(cli.commands, "run_discord", lambda config: calls.append(config) or 0)
+
+    assert cli.main(["discord"]) == 0
+    assert calls == [{"config": "config.toml"}]
+
+
+def test_cli_dispatches_style_profile_builder(monkeypatch, tmp_path) -> None:
+    calls = []
+    dataset = tmp_path / "chat.jsonl"
+    output = tmp_path / "profile.json"
+    monkeypatch.setattr(cli, "load_config", lambda path: {"config": path})
+    monkeypatch.setattr(
+        cli.commands,
+        "run_build_style_profile",
+        lambda dataset, **kwargs: calls.append((dataset, kwargs)) or 0,
+    )
+
+    assert cli.main(
+        [
+            "build-style-profile",
+            str(dataset),
+            "--output",
+            str(output),
+            "--minimum-messages",
+            "50",
+        ]
+    ) == 0
+    assert calls == [
+        (dataset, {"output": output, "text_field": "content", "minimum_messages": 50})
+    ]

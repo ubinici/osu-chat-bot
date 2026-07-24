@@ -38,6 +38,13 @@ excluded_chunk_types = ["citation"]
     monkeypatch.setenv("OSU_BOT_GENERATION_MODEL", "small-instruct")
     monkeypatch.setenv("OSU_BOT_GENERATION_API_KEY", "test-key")
     monkeypatch.setenv("OSU_BOT_GENERATION_THINK", "low")
+    monkeypatch.setenv("OSU_BOT_STYLE_PROFILE_PATH", "artifacts/style/profile.json")
+    monkeypatch.setenv("OSU_BOT_MAX_CONCURRENT_REQUESTS", "4")
+    monkeypatch.setenv("OSU_BOT_DISCORD_TOKEN", "discord-secret")
+    monkeypatch.setenv("OSU_BOT_DISCORD_API_URL", "http://app:8000/")
+    monkeypatch.setenv("OSU_BOT_DISCORD_GUILD_ID", "12345")
+    monkeypatch.setenv("OSU_BOT_DISCORD_FEEDBACK_PATH", "artifacts/feedback/discord.jsonl")
+    monkeypatch.setenv("OSU_BOT_DISCORD_EPHEMERAL", "true")
 
     config = load_config(config_path)
 
@@ -59,3 +66,10 @@ excluded_chunk_types = ["citation"]
     assert config.generation.model == "small-instruct"
     assert config.generation.api_key == "test-key"
     assert config.generation.think == "low"
+    assert config.generation.style_profile_path == Path("artifacts/style/profile.json")
+    assert config.generation.max_concurrent_requests == 4
+    assert config.discord.token == "discord-secret"
+    assert config.discord.api_url == "http://app:8000"
+    assert config.discord.guild_id == 12345
+    assert config.discord.feedback_path == Path("artifacts/feedback/discord.jsonl")
+    assert config.discord.ephemeral_answers is True
